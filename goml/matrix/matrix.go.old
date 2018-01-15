@@ -1,0 +1,398 @@
+// Package matrix implement a mathematical matrix together with some
+// metadata. Each element is represented as a float64 (double).
+// Matrices are stored in column-major order and all columns have a
+// name.
+package matrix
+
+import (
+  "fmt"
+  "bytes"
+  "os"
+  "strconv"
+  "time"
+  "bufio"
+  "strings"
+)
+
+const (
+  UNKNOWN_VALUE = -1e308
+  timeFormat = "2006-01-02 15:04:05"
+)
+
+type Matrix struct {
+  data        []float64
+  rows, cols  int
+  stride      int
+
+  // Metadata
+  relation    string
+  // attr store attribute name attr[][0] and attribute data type.
+  attr        [][2]string
+  // str_to_enum maps attribute name of nominal type to a map of
+  // nominal name and its enumerated value. This is to load data from
+  // an arff file.
+  str_to_enum map[string] map[string]int
+  // enum_to_str maps attribute name of nominal type to a map of
+  // nominal name and its enumerated value. This is useful in saving
+  // data to an arff file.
+  enum_to_str map[string] map[int]string
+}
+
+// ToVector wraps the Vector around the underlying data of a column
+// or row Matrix.
+func (m *Matrix) ToVector() *Vector {
+  Require(m.rows == 1 || m.cols == 1,
+    "ToVector: not an eligible vector\n")
+  var v Vector
+  v.size = m.rows
+  if m.cols > 1 {
+    v.size = m.cols
+  }
+  v.data = m.data
+  return &v
+}
+
+// NewMatrix creates a matrix of size rows*cols and set all element
+// to the value val (default = 0).
+func NewMatrix(rows, cols int, val ...float64) *Matrix {
+  var m Matrix
+  m.rows = rows
+  m.cols = cols
+  m.stride = rows
+  m.data = make([]float64, rows*cols)
+  N := len(val)
+  if N == 0 {
+    return &m
+  }
+
+  for i := 0; i < rows*cols; i++ {
+    m.data[i] = val[i%N]
+  }
+  return &m
+}
+
+// SetElem sets the element at row i, col j to val.
+func (m *Matrix) SetElem(i, j int, val float64) {
+  Require(i >= 0 && j >= 0 && i < m.rows && j < m.cols,
+    "SetElem: index out of bound: row = %d, col = %d\n", i, j)
+  m.data[i + j*m.stride] = val
+}
+
+// SetElems sets the elements at rows and cols to val's.
+func (m *Matrix) SetElems(rows, cols []int, vals []float64) {
+  Require(len(rows) != 0 && len(cols) != 0 && len(vals) != 0,
+    "SetElems: empty index: len(rows) = %d, len(cols) = " +
+    "%d, len(vals) = %d\n", len(rows), len(cols), len(vals))
+  Require(len(rows) == len(cols) && len(cols) == len(vals),
+    "SetElems: dimension mismatched: len(rows) = %d, len(cols) = " +
+    "%d, len(vals) = %d\n", len(rows), len(cols), len(vals))
+  for i, _ := range vals {
+    Require(rows[i] < m.rows && cols[i] < m.cols &&
+      rows[i] >= 0 && cols[i] >=0,
+      "SetElems: index out of bound: rows[%d] = %d, " +
+      "cols[%d] = %d\n", i, rows[i], i, cols[i])
+    m.data[rows[i] + cols[i]*m.stride] = vals[i]
+  }
+}
+
+// GetElem returns the element at row r and column c in the Matrix
+func (m *Matrix) GetElem(r, c int) float64 {
+  Require(r >= 0 && c >= 0 && r < m.rows && c < m.cols,
+    "SetElem: index out of bound: row = %d, col = %d\n", r, c)
+  return m.data[r + c*m.stride]
+}
+
+// GetCol returns a copy of the col j.
+func (m *Matrix) GetCol(j int) *Vector {
+  Require(j >= 0 && j < m.cols,
+    "GetCol: index out of bound: c = %d\n", j)
+  var c Vector
+  c.size = m.rows
+  c.data = make([]float64, m.rows)
+  copy(c.data, m.data[j*m.stride:(j+1)*m.stride])
+  return &c
+}
+
+// GetRow returns a copy of the row i.
+func (m *Matrix) GetRow(i int) *Vector {
+  Require(i >= 0 && i < m.rows,
+    "GetCol: index out of bound: r = %d\n", i)
+  var v Vector
+  v.size = m.cols
+  v.data = make([]float64, m.cols)
+  for j:= 0; j < m.cols; j++ {
+    v.data[j] = m.data[i + j*m.stride]
+  }
+  return &v
+}
+
+
+// String converts a Matrix into a string so that it can be printed
+// using fmt.Printf("%v\n", matrix).
+func (m *Matrix) String() string {
+  var buf bytes.Buffer
+  buf.Grow((m.rows + 1)*m.cols*21 + m.rows*2 + 2 + 2)
+  for j:= 0; j < m.cols; j++ {
+    switch m.attr[j][1][0] {
+    case 'n': // nominal
+      if len(m.attr[j][0]) > 10 {
+        fmt.Fprintf(&buf, " %10s", m.attr[j][0][:10])
+      } else {
+        fmt.Fprintf(&buf, " %10s", m.attr[j][0])
+      }
+    default:  // real
+      fmt.Fprintf(&buf, " %20s", m.attr[j][0])
+    }
+  }
+  fmt.Fprintf(&buf, "\n[\n")
+  for i:= 0; i < m.rows; i++ {
+    for j:= 0; j < m.cols; j++ {
+      switch m.attr[j][1][0] {
+      case 'n': // nominal
+        fmt.Fprintf(&buf, " %10d", int(m.data[i + j*m.stride]))
+      case 'd': // date
+        t := int64(m.data[i + j*m.stride])
+        fmt.Fprintf(&buf, " %20s",
+          time.Unix(t, 0).Format(timeFormat))
+      default:  // real
+        fmt.Fprintf(&buf, " %20.12e", m.data[i + j*m.stride])
+      }
+    }
+    fmt.Fprintf(&buf, "\n")
+  }
+  fmt.Fprintf(&buf, "]\n")
+  return buf.String()
+}
+
+// Size return the size of a matrix
+func (m *Matrix) Size() (r int, c int) {
+  return m.rows, m.cols
+}
+
+// Transpose returns the transpose of a matrix.
+func (m *Matrix) Transpose() *Matrix {
+  var t Matrix
+  t.rows, t.cols = m.cols, m.rows
+  t.stride = t.rows
+  t.data = make([]float64, t.rows*t.cols)
+  for i := 0; i < t.rows; i++ {
+    for j:= 0; j < t.cols; j++ {
+      t.data[i + j*t.stride] = m.data[j + i*m.stride]
+    }
+  }
+  return &t
+}
+
+
+// Mul stores the product of the two matracies in the receiver.
+func Mul(a, b *Matrix) *Matrix {
+  Require(a.cols == b.rows, "matrix: Mul: dimension mismatched\n")
+  var c Matrix
+  c.rows = a.rows
+  c.cols = b.cols
+  c.stride = c.rows
+  c.data = make([]float64, c.rows*c.cols)
+  for i := 0; i < c.rows; i++ {
+    for j := 0; j < c.cols; j++ {
+      for k := 0; k < a.cols; k++ {
+        c.data[i + j*c.stride] +=
+          a.data[i + k*a.stride]*b.data[k + j*b.stride]
+      }
+    }
+  }
+  return &c
+}
+
+// AddRows adds more rows to the matrix. All data are wiped out.
+func (m *Matrix) AddRows(n int) {
+  Require(n > 0, "AddRows: n must be positive")
+  m.rows += n
+  m.stride = m.rows
+  m.data = make([]float64, m.rows*m.cols)
+}
+
+// AddCols adds more cols to the matrix. All data are wiped out.
+func (m *Matrix) AddCols(n int) {
+  Require(n > 0, "AddCols: n must be positive")
+  m.cols += n
+  m.data = make([]float64, m.rows*m.cols)
+}
+
+// Scale scales all element by the factor.
+func (c *Matrix) Scale(f float64) {
+  for i, _ := range c.data {
+    c.data[i] *= f
+  }
+}
+
+// ChangeAttr changes the names of a list of attributes.
+func (m *Matrix) ChangeAttr(newNames []string) {
+}
+
+// SaveARFF save data from a matrix to an ARFF file.
+func (m *Matrix) SaveARFF(fileName) {
+  fileio, err := os.Create(fileName)
+  Require(err == nil, "LoadARFF: %v\n", err)
+  defer fileio.Close()
+}
+
+// LoadARFF loads data from ARFF file to a matrix
+func (m *Matrix) LoadARFF(fileName, timeZone string) {
+  fileio, err := os.Open(fileName)
+  Require(err == nil, "LoadARFF: %v\n", err)
+  defer fileio.Close()
+
+  attrFile := bufio.NewReader(fileio)
+  dataFile := bufio.NewReader(fileio)
+  var line string
+
+  // count the number of attributes
+  lineNum := 0  // current line
+  m.cols = 0
+  for err == nil {
+    line, err = attrFile.ReadString('\n')
+    if err != nil {
+      break
+    }
+    lineNum++
+    line = line[:len(line)-1]
+    s := Split(line, "\t ", 0, 3)
+    if len(s) == 0 { continue }
+    switch strings.ToLower(s[0]) {
+    case "@relation":
+      // store current location of the reader
+      *dataFile = *attrFile
+      m.relation = s[1]
+    case "@attribute":
+      m.cols++
+      switch strings.ToLower(string(s[2][0])) {
+      case "{": // nominal
+      case "i": // integer
+      case "r": // real
+      case "n": // numeric
+      case "s": // string
+        panic("LoadARFF: string data is not supported")
+      case "d": // date
+        s := Split(line, "\t ", 0, 4)
+        Require(strings.ToLower(s[3]) == "yyyy-mm-dd hh:mm:ss",
+          "LoadARFF: only date format '%s' is supported",
+          timeFormat)
+      default:
+        panic(fmt.Sprintf(
+          "Attribute %s: data type %q is not supported\n",
+          s[1], s[2]))
+      }
+    case "@data":
+      err = fmt.Errorf("done with reading attribute")
+    default:
+    }
+  }
+
+  // actually read attributes' names and data types.
+  m.attr = make([][2]string, m.cols)
+  m.str_to_enum = make(map[string] map[string]int)
+  m.enum_to_str = make(map[string] map[int]string)
+
+  err = nil
+  *attrFile = *dataFile
+  col := 0
+  for err == nil {
+    line, err = attrFile.ReadString('\n')
+    if err != nil {
+      break
+    }
+    line = line[:len(line)-1]
+    s := Split(line, "\t ", 0, 4)
+    if len(s) == 0 { continue }
+    switch strings.ToLower(s[0]) {
+    case "@attribute":
+      m.attr[col][0] = s[1]
+      switch strings.ToLower(string(s[2][0])) {
+      case "{": // nominal
+        m.attr[col][1] = "nominal"
+        sn := s[2][1:len(s[2]) - 1]
+        n  := Split(sn, ",", 0)
+        m.str_to_enum[s[1]] = make(map[string]int)
+        m.enum_to_str[s[1]] = make(map[int]string)
+        for i := 0; i < len(n); i++ {
+          m.str_to_enum[s[1]][n[i]] = i
+          m.enum_to_str[s[1]][i] = n[i]
+        }
+      case "i": // integer
+        fallthrough
+      case "r": // real
+        fallthrough
+      case "n": // numeric
+        m.attr[col][1] = "real"
+      case "d": // date
+        m.attr[col][1] = "date"
+      default:  // string: not implemeted
+      }
+      col++
+    case "@data":
+      err = fmt.Errorf("done with reading attribute")
+    default:
+    }
+  }
+
+  // save current location
+  *dataFile = *attrFile
+
+  // count the number of rows
+  err = nil
+  m.rows = 0
+  for err == nil {
+    line, err = attrFile.ReadString('\n')
+    if err != nil {
+      break
+    }
+
+    // Let's assume that data are stored continuously.
+    m.rows++
+  }
+  m.stride = m.rows
+
+  // actually read data
+  m.data = make([]float64, m.rows*m.cols)
+  *attrFile = *dataFile
+  err = nil
+  row := 0
+  for err == nil {
+    line, err = attrFile.ReadString('\n')
+    if err != nil {
+      break
+    }
+    lineNum++
+    line = line[:len(line)-1]
+    s := Split(line, "\t ,", 0)
+    Require(len(s) == m.cols,
+      "LoadARFF: %s: wrong number of attributes on line %d\n",
+      fileName, lineNum)
+    for j := 0; j < len(s); j++ {
+      if s[j] == "?" {
+        m.data[row + j*m.stride] = UNKNOWN_VALUE
+      } else {
+        switch m.attr[j][1][0] {
+        case 'n': // nominal
+          m.data[row + j*m.stride] =
+            float64(m.str_to_enum[m.attr[j][0]][s[j]])
+        case 'r': // real
+          number, parseErr := strconv.ParseFloat(s[j], 64)
+          Require(parseErr == nil || parseErr != strconv.ErrSyntax,
+          "LoadARFF: %s: data at column %d on line %d is not a valid real number\n",
+            fileName, j, lineNum)
+          m.data[row + j*m.stride] = number
+        case 'd': // date
+          t, parseErr := time.Parse(time.RFC3339,
+            strings.Replace(s[j], " ", "T", 1) + timeZone)
+          Require(parseErr == nil,
+          "LoadARFF: %s: data at column %d on line %d is not a valid date\n",
+            fileName, j, lineNum)
+          m.data[row + j*m.stride] = float64(t.Unix())
+        default:  // string is not implemented
+        }
+      }
+    }
+    row++
+  }
+}
