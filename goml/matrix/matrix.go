@@ -12,6 +12,8 @@ import (
   "time"
   "bufio"
   "strings"
+  "sort"
+  "math"
 )
 
 const (
@@ -19,11 +21,16 @@ const (
   TIME_FORMAT     = "2006-01-02 15:04:05"
   EXTRA_NUM_CELL  = 4
   ATTR_NAME       = 1 << 20
+  esp             = 1e-15
 )
 
+type permutation []int
+
+type matrix []Vector
+
 type Matrix struct {
-  data        [][]float64
-  rows, cols  int
+  matrix
+  rows, cols int
 
   // Metadata
   relation    string
@@ -69,19 +76,19 @@ func NewMatrix (rows, cols int, val ...float64) *Matrix {
   }
 
   // actual data
-  m.data = make ([][]float64, rows, rows + EXTRA_NUM_CELL)
+  m.matrix = make ([]Vector, rows, rows + EXTRA_NUM_CELL)
   N := len(val)
   if N == 0 {
     for i:= 0; i < rows; i++ {
-      m.data[i] = make ([]float64, cols, cols + EXTRA_NUM_CELL)
+      m.matrix[i] = make ([]float64, cols, cols + EXTRA_NUM_CELL)
     }
     return &m
   }
 
   for i:= 0; i < rows; i++ {
-    m.data[i] = make ([]float64, cols, cols + EXTRA_NUM_CELL)
+    m.matrix[i] = make ([]float64, cols, cols + EXTRA_NUM_CELL)
     for j:= 0; j < cols; j++ {
-      m.data[i][j] = val[(i*m.cols + j)%N]
+      m.matrix[i][j] = val[(i*m.cols + j)%N]
     }
   }
 
@@ -90,7 +97,7 @@ func NewMatrix (rows, cols int, val ...float64) *Matrix {
 
 // SetElem sets the element at row i, col j to val.
 func (m *Matrix) SetElem(i, j int, val float64) {
-  m.data[i][j] = val
+  m.matrix[i][j] = val
 }
 
 // SetElems sets the elements at rows and cols to val's.
@@ -102,38 +109,31 @@ func (m *Matrix) SetElems(rows, cols []int, vals []float64) {
     "SetElems: dimension mismatched: len(rows) = %d, len(cols) = " +
     "%d, len(vals) = %d\n", len(rows), len(cols), len(vals))
   for i, val := range vals {
-    m.data[rows[i]][cols[i]] = val
+    m.matrix[rows[i]][cols[i]] = val
   }
 }
 
 // GetElem returns the element at row r and column c in the Matrix
 func (m *Matrix) GetElem(r, c int) float64 {
-  return m.data[r][c]
+  return m.matrix[r][c]
 }
 
 // GetCol returns a copy of the col j.
-func (m *Matrix) GetCol(j int) *Vector {
+func (m *Matrix) GetCol(j int) Vector {
   Require (j >= 0 && j < m.cols,
     "GetCol: index out of bound: c = %d\n", j)
-  var c Vector
-  c.size = m.rows
-  c.data = make ([]float64, c.size)
+  c := make ([]float64, m.rows)
   for i:= 0; i < m.cols; i++ {
-    c.data[i] = m.data[i][j]
+    c[i] = m.matrix[i][j]
   }
-  return &c
+  return c
 }
 
 // GetRow wraps a vector around the row i.
-func (m *Matrix) GetRow(i int) *Vector {
+func (m *Matrix) GetRow(i int) Vector {
   Require (i >= 0 && i < m.rows,
     "GetCol: index out of bound: r = %d\n", i)
-  var v Vector
-  v.size = m.cols
-  v.data = m.data[i]
-  //v.data = make ([]float64, m.cols)
-  //copy (v.data, m.data[i])
-  return &v
+  return m.matrix[i]
 }
 
 
@@ -191,13 +191,13 @@ func (m *Matrix) String() string {
     for j:= 0; j < m.cols; j++ {
       switch m.enum_to_str[j][ATTR_NAME][0] {
       case 'n': // nominal
-        fmt.Fprintf(&buf, " %10d", int(m.data[i][j]))
+        fmt.Fprintf(&buf, " %10d", int(m.matrix[i][j]))
       case 'd': // date
-        t := int64(m.data[i][j])
+        t := int64(m.matrix[i][j])
         fmt.Fprintf(&buf, " %20s",
           time.Unix(t, 0).Format(TIME_FORMAT))
       default:  // real
-        fmt.Fprintf(&buf, " %20.12e", m.data[i][j])
+        fmt.Fprintf(&buf, " %20.12e", m.matrix[i][j])
       }
     }
     fmt.Fprintf(&buf, "\n")
@@ -223,29 +223,15 @@ func (m *Matrix) Size() (r int, c int) {
 
 // Transpose returns the transpose of a matrix.
 func (m *Matrix) Transpose() *Matrix {
-  var t Matrix
-  t.rows, t.cols = m.cols, m.rows
-
-  // metadata
-  t.relation = "default"
-  t.attrName = make ([]string, t.cols, t.cols + EXTRA_NUM_CELL)
-  t.str_to_enum = make ([] map[string]int, t.cols, t.cols + EXTRA_NUM_CELL)
-  t.enum_to_str = make ([] map[int]string, t.cols, t.cols + EXTRA_NUM_CELL)
-  for i:= 0; i < t.cols; i++ {
-    t.attrName[i] = fmt.Sprintf("col_%d",i)
-    t.enum_to_str[i] = make (map[int]string)
-    t.enum_to_str[i][ATTR_NAME] = "real"
-  }
+  t := NewMatrix(m.cols, m.rows)
 
   // actual data
-  t.data = make ([][]float64, t.rows, t.rows + EXTRA_NUM_CELL)
   for i := 0; i < t.rows; i++ {
-    t.data[i] = make ([]float64, t.cols, t.cols + EXTRA_NUM_CELL)
     for j:= 0; j < t.cols; j++ {
-      t.data[i][j] = m.data[j][i]
+      t.matrix[i][j] = m.matrix[j][i]
     }
   }
-  return &t
+  return t
 }
 
 
@@ -269,9 +255,9 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
   }
 
   // allocate memory
-  m.data = make ([][]float64, m.rows, m.rows + EXTRA_NUM_CELL)
+  m.matrix = make ([]Vector, m.rows, m.rows + EXTRA_NUM_CELL)
   for i := 0; i < m.rows; i++ {
-    m.data[i] = make ([]float64, m.cols, m.cols + EXTRA_NUM_CELL)
+    m.matrix[i] = make ([]float64, m.cols, m.cols + EXTRA_NUM_CELL)
   }
 
   // compute the product
@@ -280,7 +266,7 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
       for i := 0; i < m.rows; i++ {
         for j := 0; j < m.cols; j++ {
           for k := 0; k < a.rows; k++ {
-            m.data[i][j] += a.data[k][i]*b.data[j][k]
+            m.matrix[i][j] += a.matrix[k][i]*b.matrix[j][k]
           }
         }
       }
@@ -288,7 +274,7 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
       for i := 0; i < m.rows; i++ {
         for j := 0; j < m.cols; j++ {
           for k := 0; k < a.rows; k++ {
-            m.data[i][j] += a.data[k][i]*b.data[k][j]
+            m.matrix[i][j] += a.matrix[k][i]*b.matrix[k][j]
           }
         }
       }
@@ -298,7 +284,7 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
       for i := 0; i < m.rows; i++ {
         for j := 0; j < m.cols; j++ {
           for k := 0; k < a.cols; k++ {
-            m.data[i][j] += a.data[i][k]*b.data[j][k]
+            m.matrix[i][j] += a.matrix[i][k]*b.matrix[j][k]
           }
         }
       }
@@ -306,7 +292,7 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
       for i := 0; i < m.rows; i++ {
         for j := 0; j < m.cols; j++ {
           for k := 0; k < a.cols; k++ {
-            m.data[i][j] += a.data[i][k]*b.data[k][j]
+            m.matrix[i][j] += a.matrix[i][k]*b.matrix[k][j]
           }
         }
       }
@@ -326,15 +312,15 @@ func (m *Matrix) AddRows(n int) {
   Require (n > 0, "AddRows: n must be positive")
   oldRow := m.rows
   m.rows += n
-  if m.rows <= cap(m.data) {
-    m.data = m.data[:m.rows]
+  if m.rows <= cap(m.matrix) {
+    m.matrix = m.matrix[:m.rows]
   } else {
-    temp := make ([][]float64, m.rows, m.rows + EXTRA_NUM_CELL)
-    copy (temp, m.data)
-    m.data = temp
+    temp := make ([]Vector, m.rows, m.rows + EXTRA_NUM_CELL)
+    copy (temp, m.matrix)
+    m.matrix = temp
   }
   for i:= oldRow; i < m.rows; i++ {
-    m.data[i] = make([]float64, m.cols, m.cols + EXTRA_NUM_CELL)
+    m.matrix[i] = make([]float64, m.cols, m.cols + EXTRA_NUM_CELL)
   }
 }
 
@@ -343,9 +329,9 @@ func (m *Matrix) AddCols(n int) {
   Require (n > 0, "AddCols: n must be positive")
   oldCol := m.cols
   m.cols += n
-  if m.cols <= cap(m.data[0]) {
+  if m.cols <= cap(m.matrix[0]) {
     for i:= 0; i < m.rows; i++ {
-      m.data[i] = m.data[i][:m.cols]
+      m.matrix[i] = m.matrix[i][:m.cols]
     }
     m.attrName = m.attrName[:m.cols]
     m.enum_to_str = m.enum_to_str[:m.cols]
@@ -353,8 +339,8 @@ func (m *Matrix) AddCols(n int) {
   } else {
     for i:= 0; i < m.rows; i++ {
       temp := make([]float64, m.cols, m.cols + EXTRA_NUM_CELL)
-      copy (temp, m.data[i])
-      m.data[i] = temp
+      copy (temp, m.matrix[i])
+      m.matrix[i] = temp
     }
   }
   temp := make([]string, m.cols, m.cols + EXTRA_NUM_CELL)
@@ -377,7 +363,7 @@ func (m *Matrix) AddCols(n int) {
 func (m *Matrix) Scale(c float64) {
   for i:= 0; i < m.rows; i++ {
     for j:= 0; j < m.cols; j++ {
-      m.data[i][j] *= c
+      m.matrix[i][j] *= c
     }
   }
 }
@@ -456,11 +442,11 @@ func (m *Matrix) SaveARFF(fileName string) {
       var s string
       switch m.enum_to_str[j][ATTR_NAME][0] {
       case 'n':   // nominal
-        s = fmt.Sprintf("%s",m.enum_to_str[j][int(m.data[i][j])])
+        s = fmt.Sprintf("%s",m.enum_to_str[j][int(m.matrix[i][j])])
       case 'r':   // real
-        s = fmt.Sprintf("%.15e", m.data[i][j])
+        s = fmt.Sprintf("%.15e", m.matrix[i][j])
       default:    // date
-        t := int64(m.data[i][j])
+        t := int64(m.matrix[i][j])
         s = fmt.Sprintf("%s", time.Unix(t, 0).Format(TIME_FORMAT))
       }
       file.WriteString(s)
@@ -540,7 +526,7 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) {
   }
 
   // read data
-  m.data = make ([][]float64, 0, EXTRA_NUM_CELL)
+  m.matrix = make ([]Vector, 0, EXTRA_NUM_CELL)
   err = nil
   row := 0
   for err == nil {
@@ -556,29 +542,29 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) {
     Require (len(s) == m.cols,
       "LoadARFF: %s: wrong number of attributes on line %d\n",
       fileName, lineNum )
-    m.data = append (m.data, make ([]float64, m.cols, m.cols +
+    m.matrix = append (m.matrix, make ([]float64, m.cols, m.cols +
       EXTRA_NUM_CELL))
     for j := 0; j < len(s); j++ {
       if s[j] == "?" {
-        m.data[row][j] = UNKNOWN_VALUE
+        m.matrix[row][j] = UNKNOWN_VALUE
       } else {
         switch m.enum_to_str[j][ATTR_NAME][0] {
         case 'n': // nominal
-          m.data[row][j] =
+          m.matrix[row][j] =
             float64(m.str_to_enum[j][s[j]])
         case 'r': // real
           number, parseErr := strconv.ParseFloat(s[j], 64)
           Require (parseErr == nil || parseErr != strconv.ErrSyntax,
           "LoadARFF: %s: data at column %d on line %d is not a valid real number\n",
             fileName, j, lineNum)
-          m.data[row][j] = number
+          m.matrix[row][j] = number
         case 'd': // date
           t, parseErr := time.Parse (time.RFC3339,
             strings.Replace(s[j], " ", "T", 1) + timeZone )
           Require (parseErr == nil,
           "LoadARFF: %s: data at column %d on line %d is not a valid date\n",
             fileName, j, lineNum )
-          m.data[row][j] = float64 (t.Unix())
+          m.matrix[row][j] = float64 (t.Unix())
         default:  // string is not implemented
         }
       }
@@ -588,26 +574,23 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) {
   m.rows = row
 }
 
-// SubMatrix returns a reference to a rectangular subarea.
-func (m *Matrix) SubMatrix(topLeft, bottomRight [2]int) *Matrix {
-  // slice everything
-  var t Matrix
-  t.cols = bottomRight[1] - topLeft[1]
-  t.rows = bottomRight[0] - topLeft[0]
-  t.relation = m.relation
-  t.attrName = m.attrName[topLeft[1]:bottomRight[1]]
-  t.enum_to_str = m.enum_to_str[topLeft[1]:bottomRight[1]]
-  t.str_to_enum = m.str_to_enum[topLeft[1]:bottomRight[1]]
-  t.data = m.data[topLeft[0]:bottomRight[0]]
-  for i:= 0; i < t.rows; i++ {
-    t.data[i] = m.data[i][topLeft[1]:bottomRight[1]]
+// SubMatrix copy the content of a submatrix of a matrix determined
+// by the list of column indices and row indices. This operation
+// allows duplicating rows and columns.
+func (m *Matrix) SubMatrix(s *Matrix, rows, cols []int) {
+  if len(rows) != s.rows || len(cols) != s.cols {
+    s = NewMatrix(len(rows), len(cols))
   }
-  return &t
+  for i:= 0; i < len(rows); i++ {
+    for j:= 0; j < len(cols); j++ {
+      s.matrix[i][j] = m.matrix[rows[i]][cols[j]]
+    }
+  }
 }
 
 // SwapRows swaps two rows in the matrix.
 func (m *Matrix) SwapRows(r1, r2 int) {
-  m.data[r1], m.data[r2] = m.data[r2], m.data[r1]
+  m.matrix[r1], m.matrix[r2] = m.matrix[r2], m.matrix[r1]
 }
 
 // SwapCols swaps two columns in the matrix (including metadata).
@@ -616,37 +599,213 @@ func (m *Matrix) SwapCols(c1, c2 int) {
   m.enum_to_str[c1], m.enum_to_str[c2] = m.enum_to_str[c2], m.enum_to_str[c1]
   m.str_to_enum[c1], m.str_to_enum[c2] = m.str_to_enum[c2], m.str_to_enum[c1]
   for i:= 0; i < m.rows; i++ {
-    m.data[i][c1], m.data[i][c2] = m.data[i][c2], m.data[i][c1]
+    m.matrix[i][c1], m.matrix[i][c2] = m.matrix[i][c2], m.matrix[i][c1]
   }
 }
 
-// axb returns the vector A*x + sign*b.
-func (a *Matrix) axb(x, b *Vector, sign int) *Vector {
-  Require(a.cols == x.size && a.rows == b.size,
-  "Axb: dimension mismatched: a.cols == x.size && a.rows == b.size\n")
-  axb := NewVector(a.rows)
+// axb returns the vector A*x + sign*b where sign is in {-1, 1}.
+func (a *Matrix) axb(x, b Vector, sign int) Vector {
+  Require(a.cols == len(x) && a.rows == len(b),
+  "Axb: dimension mismatched: a.cols == len(x) && a.rows == len(b)\n")
+  v := NewVector(a.rows)
   if sign < 0 {
-    for i:= 0; i < axb.size; i++ {
+    for i:= 0; i < len(v); i++ {
       for j:= 0; j < a.cols; j++ {
-        axb.data[i] += a.data[i][j]*x.data[j] - b.data[j]
+        v[i] += a.matrix[i][j]*x[j]
       }
+      v[i] -= b[i]
     }
   } else {
-    for i:= 0; i < axb.size; i++ {
+    for i:= 0; i < len(v); i++ {
       for j:= 0; j < a.cols; j++ {
-        axb.data[i] += a.data[i][j]*x.data[j] + b.data[j]
+        v[i] += a.matrix[i][j]*x[j]
       }
+      v[i] += b[i]
     }
   }
-  return axb
+  return v
 }
 
 // Axpb returns the vector A*x + b.
-func Axpb(A *Matrix, x, b *Vector) *Vector {
+func Axpb(A *Matrix, x, b Vector) Vector {
   return A.axb(x, b, 1)
 }
 
-// Axmb returns the vector A*x + b.
-func Axmb(A *Matrix, x, b *Vector) *Vector {
+// Axmb returns the vector A*x - b.
+func Axmb(A *Matrix, x, b Vector) Vector {
   return A.axb(x, b, -1)
+}
+
+// PermuteCols change the columns of the matrix due to a permutation.
+func (m *Matrix) PermuteCols(P permutation) {
+  if (m.cols != len(P)) {
+    panic("PermuteCols: permutation is of the wrong size\n")
+  }
+  i := 0
+  for i < len(P) {
+    for P[i] != i {
+      j := P[i]
+      k := P[j]
+      m.SwapCols(j, k)
+      P[i], P[j] = P[j], P[i]
+    }
+    i++
+  }
+}
+
+// PermuteRows change the rows of the matrix due to a permutation.
+func (m *Matrix) PermuteRows(P permutation) {
+  if (m.rows != len(P)) {
+    panic("PermuteCols: permutation is of the wrong size\n")
+  }
+  i := 0
+  for i < len(P) {
+    for P[i] != i {
+      j := P[i]
+      k := P[j]
+      m.SwapRows(j, k)
+      P[i], P[j] = P[j], P[i]
+    }
+    i++
+  }
+}
+
+
+// LeastSquare solves the solution to the least square problem with
+// assumption that the norm of the solution is minimum.
+// We use the pivoting Householder QR method.
+func (m *Matrix) LeastSquare(b Vector) Vector {
+  Require(m.rows >= m.cols,
+    "LeastSquare: expected at least as many rows as columns\n")
+  Require(m.rows == len(b), "LeastSquare: dimension mismatched\n")
+  var x Vector = NewVector(m.cols)
+
+  var P permutation
+  rank := m.QR(b, &P)
+
+  // backward substitution
+  i := rank - 1
+  k := P[i]
+  x[k] = b[i]/m.matrix[i][k]
+  var l int
+  for i:= rank-2; i >= 0; i-- {
+    k = P[i]
+    x[k] = b[i]
+    for j:= i+1; j < rank; j++ {
+      l = P[j]
+      x[k] -= x[l]*m.matrix[i][l]
+    }
+    x[k] /= m.matrix[i][k]
+  }
+
+  return x
+}
+
+
+// QR perform QR factorization on the matrix m and return the rank of
+// m. After QR is done, m will be R, b will be Q*b, and *p maps the
+// new columns' positions to their original ones. For example,
+// (*p)[0] is the original column of column 0, i.e, column (*p)[0] of
+// the matrix R returned by this QR code is the column 0 of the
+// matrix R after doing QR factoriation with column pivoting.
+func (m *Matrix) QR(b Vector, p *permutation) int {
+  var P permutation = make([]int, len(b))
+
+  // pre-sort rows by ascending order
+  rowNorms := make(valuesort, len(b))
+  for i:= 0; i < len(b); i++ {
+    rowNorms[i].val = m.GetRow(i).Norm(0)
+    rowNorms[i].idx = i
+  }
+  sort.Sort(rowNorms)
+  for i:= 0; i < len(b); i++ {
+    P[i] = rowNorms[i].idx
+  }
+
+  // sort the rows based on sorted norms, after this P will become
+  // the identity permuation.
+  m.PermuteRows(P)
+
+  for i:= 0; i < len(b); i++ {
+    P[i] = rowNorms[i].idx
+  }
+  b.Permute(P)
+
+  // now perform Householder with column pivoting
+  // We will perform column pivoting implicitly using a permutation.
+
+  // Identity permutation on columns.
+  *p = make([]int, m.cols)
+  P = *p
+  for i:= 0; i < len(P); i++ {
+    P[i] = i
+  }
+
+  // Householder step on both A and b.
+  maxColNorm := float64(0)
+  maxColIndex := 0
+  colNorm := maxColNorm
+  vk := NewVector(m.rows)
+  x  := NewVector(m.rows)
+  var l int
+  for k:= 0; k < m.cols; k++ {
+    // determine column with largest 2-norm
+    maxColNorm = 0
+    for j:= k; j < m.cols; j++ {
+      colNorm = 0
+      l = P[j]
+      for i:= k; i < m.rows; i++ {
+        colNorm += m.matrix[i][l]*m.matrix[i][l]
+      }
+      Require(!math.IsNaN(colNorm) && !math.IsInf(colNorm, 0),
+        "LeastSquare: the norm of column %d is not a number.\n", P[j])
+      if colNorm > maxColNorm {
+        maxColNorm = colNorm
+        maxColIndex = j
+      }
+    }
+
+    a00 := m.matrix[0][P[0]]
+    if maxColNorm < a00*esp*esp*a00 {
+      return k
+    }
+    // swap columns i and maxColIndex
+    P[k], P[maxColIndex] = P[maxColIndex], P[k]
+
+    // Get the k-th column vector
+    l = P[k]
+    for j:= k; j < m.rows; j++ {
+      vk[j] = m.matrix[j][l]
+    }
+
+    colNorm = vk[k:].Norm(2)
+    if vk[k] < 0 {
+      vk[k] -= colNorm
+    } else {
+      vk[k] += colNorm
+    }
+
+    colNorm = vk[k:].Norm(2)
+    colNorm = float64(1)/colNorm
+    vk[k:].Scale(colNorm)
+
+    // A[k:m, k:n] -= 2vk(vk*A[k:m, k:n])
+    for j:= k; j < m.cols; j++ {
+      l = P[j]
+      for i:= k; i < m.rows; i++ {
+        x[i] = m.matrix[i][l]
+      }
+      colNorm = 2*x[k:].Dot(vk[k:])
+      for i:= k; i < m.rows; i++ {
+        m.matrix[i][l] -= colNorm*vk[i]
+      }
+    }
+
+    // compute Q*b
+    colNorm = 2*b[k:].Dot(vk[k:])
+    for i:= k; i < m.rows; i++ {
+      b[i] -= colNorm*vk[i]
+    }
+  }
+  return m.cols
 }
