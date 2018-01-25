@@ -4,27 +4,42 @@
 package learnML
 
 import (
-  "./matrix"
-  "./rand"
+	"../matrix"
+	"../rand"
 )
 
 type SupervisedLearner interface {
-  // Returns the name of this learner
-  Name() string
+	// Returns the name of this learner
+	Name() string
 
-  // Train this learner
-  Train(features, labels *Matrix)
+	// Train this learner
+	Train(features, labels *matrix.Matrix)
 
-  // Partially train using a single pattern
-  TrainIncremental(feat, lab Vector)
+	// Partially train using a single pattern
+	TrainIncremental(feat, lab matrix.Vector)
 
-  // Make a prediction
-  Predict(in Vector) Vector
+	// Make a prediction
+	Predict(in matrix.Vector) matrix.Vector
 
-  // Measures the misclassifications with the provided test data
-  CountMisclassifications(features, labels *Matrix)
+	// This default implementation just copies the data, without
+	// changing it in any way.
+	FilterData(featIn, labIn, featOut, labOut *matrix.Matrix)
+}
 
-  // This default implementation just copies the data, without
-  // changing it in any way.
-  Filter_data(feat_in, lab_in, feat_out, lab_out *Matrix)
+// Measures the misclassifications with the provided test data
+func CountMisclassifications(learner SupervisedLearner, features, labels *matrix.Matrix) int {
+	Require(features.Rows() != labels.Rows(),
+		"CountMisclassifications: Mismatching number of rows\n")
+
+	mis := 0
+	for i := 0; i < features.Rows(); i++ {
+		pred := learner.Predict(features.Row(i))
+		lab := labels.Row(i)
+		for j = 0; j < len(lab); j++ {
+			if pred[j] != lab[j] {
+				mis++
+			}
+		}
+	}
+	return mis
 }
