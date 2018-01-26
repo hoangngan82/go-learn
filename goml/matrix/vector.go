@@ -15,26 +15,7 @@ type Vector []float64
 // ToMatrix wraps a 1-by-n matrix around the underlying data of a
 // vector.
 func (v Vector) ToMatrix() *Matrix {
-	var m Matrix
-	m.rows = 1
-	m.cols = len(v)
-	cols := m.cols
-
-	// metadata
-	m.relation = "default"
-	m.attrName = make([]string, cols, cols+EXTRA_NUM_CELL)
-	m.str_to_enum = make([]map[string]int, cols, cols+EXTRA_NUM_CELL)
-	m.enum_to_str = make([]map[int]string, cols, cols+EXTRA_NUM_CELL)
-	for i := 0; i < cols; i++ {
-		m.attrName[i] = fmt.Sprintf("col_%d", i)
-		m.enum_to_str[i] = make(map[int]string)
-		m.enum_to_str[i][ATTR_NAME] = "real"
-	}
-
-	// actual data
-	m.matrix = make([]Vector, 1)
-	m.matrix[0] = v
-	return &m
+	return NewMatrix(1, len(v), v)
 }
 
 // NewVector creates a vector of length size and set all element
@@ -159,7 +140,7 @@ func (a Vector) Dot(b Vector) float64 {
 
 // OuterProd returns the matrix a^t*b.
 func (a Vector) OuterProd(b Vector) *Matrix {
-	o := NewMatrix(len(a), len(b))
+	o := NewMatrix(len(a), len(b), nil)
 	for i := 0; i < o.rows; i++ {
 		for j := 0; j < o.cols; j++ {
 			o.matrix[i][j] = a[i] * b[j]

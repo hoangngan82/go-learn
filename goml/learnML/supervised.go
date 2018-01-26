@@ -26,7 +26,8 @@ type SupervisedLearner interface {
 	FilterData(featIn, labIn, featOut, labOut *matrix.Matrix)
 }
 
-// Measures the misclassifications with the provided test data
+// CountMisclassifications measures the misclassifications with the
+// provided test data.
 func CountMisclassifications(learner SupervisedLearner, features, labels *matrix.Matrix) int {
 	Require(features.Rows() != labels.Rows(),
 		"CountMisclassifications: Mismatching number of rows\n")
@@ -42,4 +43,22 @@ func CountMisclassifications(learner SupervisedLearner, features, labels *matrix
 		}
 	}
 	return mis
+}
+
+// CountMisclassifications measures the misclassifications with the
+// provided test data.
+func SSE(learner SupervisedLearner, features, labels *matrix.Matrix) float64 {
+	Require(features.Rows() != labels.Rows(),
+		"SSE: Mismatching number of rows\n")
+
+	sse := float64(0)
+	for i := 0; i < features.Rows(); i++ {
+		pred := learner.Predict(features.Row(i))
+		lab := labels.Row(i)
+		for j = 0; j < len(lab); j++ {
+			diff := pred[j] - lab[j]
+			sse += diff * diff
+		}
+	}
+	return sse
 }

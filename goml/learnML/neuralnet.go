@@ -6,28 +6,25 @@ import (
 )
 
 type NeuralNet struct {
+	layers []Layer
 }
 
 func (n *NeuralNet) Name() string {
-	panic("not implemented")
+	return "NeuralNet"
 }
 
 func (n *NeuralNet) Train(features *matrix.Matrix, labels *matrix.Matrix) {
 	panic("not implemented")
 }
 
-func (n *NeuralNet) TrainIncremental(feat learnML.Vector, lab learnML.Vector) {
+func (n *NeuralNet) TrainIncremental(feat matrix.Vector, lab matrix.Vector) {
 	panic("not implemented")
 }
 
-func (n *NeuralNet) Predict(in learnML.Vector) learnML.Vector {
+func (n *NeuralNet) Predict(in matrix.Vector) matrix.Vector {
 	panic("not implemented")
 }
 
-func (n *NeuralNet) CountMisclassifications(features *matrix.Matrix, labels *matrix.Matrix) {
-	panic("not implemented")
-}
-
-func (n *NeuralNet) Filter_data(feat_in *matrix.Matrix, lab_in *matrix.Matrix, feat_out *matrix.Matrix, lab_out *matrix.Matrix) {
+func (n *NeuralNet) FilterData(featIn *matrix.Matrix, labIn *matrix.Matrix, featOut *matrix.Matrix, labOut *matrix.Matrix) {
 	panic("not implemented")
 }

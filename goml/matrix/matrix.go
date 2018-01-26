@@ -19,8 +19,8 @@ import (
 const (
 	UNKNOWN_VALUE  = -1e308
 	TIME_FORMAT    = "2006-01-02 15:04:05"
-	EXTRA_NUM_CELL = 4
 	ATTR_NAME      = 1 << 20
+	EXTRA_NUM_CELL = 10
 	ESP            = 1e-15
 )
 
@@ -29,6 +29,7 @@ type permutation []int
 type matrix []Vector
 
 type Matrix struct {
+	data Vector
 	matrix
 	rows, cols int
 
@@ -56,47 +57,44 @@ type Matrix struct {
 
 // NewMatrix creates a matrix of size rows*cols and set all element
 // to the value val (default = 0).
-func NewMatrix(rows, cols int, val ...float64) *Matrix {
+func NewMatrix(rows, cols int, val []float64) *Matrix {
 	Require(rows > 0 && cols > 0,
 		"NewMatrix: cannot generate an empty matrix of size %d-by-%d\n",
 		rows, cols)
+	Require(len(val) == 0 || len(val) == rows*cols,
+		"NewMatrix: len(val) = 0 = %d || len(val) = rows*cols and %d, %d", len(val), rows, cols)
 	var m Matrix
 	m.rows = rows
 	m.cols = cols
 
 	// metadata
 	m.relation = "default"
-	m.attrName = make([]string, cols, cols+EXTRA_NUM_CELL)
-	m.str_to_enum = make([]map[string]int, cols, cols+EXTRA_NUM_CELL)
-	m.enum_to_str = make([]map[int]string, cols, cols+EXTRA_NUM_CELL)
-	for i := 0; i < cols; i++ {
+	m.attrName = make([]string, m.cols)
+	m.str_to_enum = make([]map[string]int, m.cols)
+	m.enum_to_str = make([]map[int]string, m.cols)
+	for i := 0; i < m.cols; i++ {
 		m.attrName[i] = fmt.Sprintf("col_%d", i)
 		m.enum_to_str[i] = make(map[int]string)
 		m.enum_to_str[i][ATTR_NAME] = "real"
 	}
 
 	// actual data
-	m.matrix = make([]Vector, rows, rows+EXTRA_NUM_CELL)
-	N := len(val)
-	if N == 0 {
-		for i := 0; i < rows; i++ {
-			m.matrix[i] = make([]float64, cols, cols+EXTRA_NUM_CELL)
-		}
-		return &m
+	m.matrix = make([]Vector, m.rows)
+	if len(val) > 0 {
+		m.data = val
+	} else {
+		m.data = make(Vector, m.rows*m.cols)
 	}
 
-	for i := 0; i < rows; i++ {
-		m.matrix[i] = make([]float64, cols, cols+EXTRA_NUM_CELL)
-		for j := 0; j < cols; j++ {
-			m.matrix[i][j] = val[(i*m.cols+j)%N]
-		}
+	for i := 0; i < m.rows; i++ {
+		m.matrix[i] = m.data[i*m.cols : (i+1)*m.cols]
 	}
 
 	return &m
 }
 
 // Equal test if two matrices are equal.
-func (m *Matrix) Equal(b *Matrix) bool {
+func (m *Matrix) Equal(b *Matrix, tol ...float64) bool {
 	if m.cols != b.cols || m.rows != b.rows {
 		return false
 	}
@@ -241,7 +239,7 @@ func (m *Matrix) Size() (r int, c int) {
 
 // Transpose returns the transpose of a matrix.
 func (m *Matrix) Transpose() *Matrix {
-	t := NewMatrix(m.cols, m.rows)
+	t := NewMatrix(m.cols, m.rows, nil)
 
 	// actual data
 	for i := 0; i < t.rows; i++ {
@@ -264,21 +262,27 @@ func (m *Matrix) Mul(a, b *Matrix, aTranspose, bTranspose bool) {
 	}
 	Require(cols == rows, "matrix: Mul: dimension mismatched\n")
 
-	// metadata
-	m.relation = "default"
-	m.attrName = make([]string, m.cols, m.cols+EXTRA_NUM_CELL)
-	m.str_to_enum = make([]map[string]int, m.cols, m.cols+EXTRA_NUM_CELL)
-	m.enum_to_str = make([]map[int]string, m.cols, m.cols+EXTRA_NUM_CELL)
-	for i := 0; i < m.cols; i++ {
-		m.attrName[i] = fmt.Sprintf("col_%d", i)
-		m.enum_to_str[i] = make(map[int]string)
-		m.enum_to_str[i][ATTR_NAME] = "real"
-	}
+	// If the underlying data is of correct size, do not allocate new
+	// memory.
+	if len(m.data) == m.cols*m.rows {
+		// metadata
+		m.relation = "default"
+		m.attrName = make([]string, m.cols)
+		m.str_to_enum = make([]map[string]int, m.cols)
+		m.enum_to_str = make([]map[int]string, m.cols)
+		for i := 0; i < m.cols; i++ {
+			m.attrName[i] = fmt.Sprintf("col_%d", i)
+			m.enum_to_str[i] = make(map[int]string)
+			m.enum_to_str[i][ATTR_NAME] = "real"
+		}
 
-	// allocate memory
-	m.matrix = make([]Vector, m.rows, m.rows+EXTRA_NUM_CELL)
-	for i := 0; i < m.rows; i++ {
-		m.matrix[i] = make([]float64, m.cols, m.cols+EXTRA_NUM_CELL)
+		// reassign row index
+		m.matrix = make([]Vector, m.rows)
+		for i := 0; i < m.rows; i++ {
+			m.matrix[i] = m.data[i*m.cols : (i+1)*m.cols]
+		}
+	} else {
+		*m = *NewMatrix(m.rows, m.cols, nil)
 	}
 
 	// compute the product
@@ -327,49 +331,40 @@ func Mul(a, b *Matrix, aTranspose, bTranspose bool) *Matrix {
 	return &c
 }
 
-// AddRows adds more rows to the matrix. All data are wiped out.
+// AddRows adds more rows to the matrix. Old data are kept intact.
 func (m *Matrix) AddRows(n int) {
 	Require(n > 0, "AddRows: n must be positive")
-	oldRow := m.rows
 	m.rows += n
-	if m.rows <= cap(m.matrix) {
-		m.matrix = m.matrix[:m.rows]
-	} else {
-		temp := make([]Vector, m.rows, m.rows+EXTRA_NUM_CELL)
-		copy(temp, m.matrix)
-		m.matrix = temp
-	}
-	for i := oldRow; i < m.rows; i++ {
-		m.matrix[i] = make([]float64, m.cols, m.cols+EXTRA_NUM_CELL)
+	m.matrix = make([]Vector, m.rows)
+	temp := make(Vector, m.rows*m.cols)
+	copy(temp, m.data)
+	m.data = temp
+	for i := 0; i < m.rows; i++ {
+		m.matrix[i] = m.data[i*m.cols : (i+1)*m.cols]
 	}
 }
 
-// AddCols adds more cols to the matrix. All data are wiped out.
+// AddCols adds more cols to the matrix. All data are kept intact.
+// If you don't need to keep old data, use NewMatrix instead
 func (m *Matrix) AddCols(n int) {
 	Require(n > 0, "AddCols: n must be positive")
 	oldCol := m.cols
 	m.cols += n
-	if m.cols <= cap(m.matrix[0]) {
-		for i := 0; i < m.rows; i++ {
-			m.matrix[i] = m.matrix[i][:m.cols]
-		}
-		m.attrName = m.attrName[:m.cols]
-		m.enum_to_str = m.enum_to_str[:m.cols]
-		m.str_to_enum = m.str_to_enum[:m.cols]
-	} else {
-		for i := 0; i < m.rows; i++ {
-			temp := make([]float64, m.cols, m.cols+EXTRA_NUM_CELL)
-			copy(temp, m.matrix[i])
-			m.matrix[i] = temp
-		}
+	temp := make(Vector, m.rows*m.cols)
+	for i := 0; i < m.rows; i++ {
+		copy(temp[i*m.cols:], m.data[i*oldCol:(i+1)*oldCol])
+		m.matrix[i] = temp[i*m.cols : (i+1)*m.cols]
 	}
-	temp := make([]string, m.cols, m.cols+EXTRA_NUM_CELL)
-	copy(temp, m.attrName)
-	m.attrName = temp
-	temps := make([]map[string]int, m.cols, m.cols+EXTRA_NUM_CELL)
+	m.data = temp
+
+	// metadata
+	tempn := make([]string, m.cols)
+	copy(tempn, m.attrName)
+	m.attrName = tempn
+	temps := make([]map[string]int, m.cols)
 	copy(temps, m.str_to_enum)
 	m.str_to_enum = temps
-	tempe := make([]map[int]string, m.cols, m.cols+EXTRA_NUM_CELL)
+	tempe := make([]map[int]string, m.cols)
 	copy(tempe, m.enum_to_str)
 	m.enum_to_str = tempe
 	for i := oldCol; i < m.cols; i++ {
@@ -381,10 +376,8 @@ func (m *Matrix) AddCols(n int) {
 
 // Scale scales all element by the factor.
 func (m *Matrix) Scale(c float64) {
-	for i := 0; i < m.rows; i++ {
-		for j := 0; j < m.cols; j++ {
-			m.matrix[i][j] *= c
-		}
+	for i := 0; i < len(m.data); i++ {
+		m.data[i] *= c
 	}
 }
 
@@ -565,8 +558,7 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) {
 		Require(len(s) == m.cols,
 			"LoadARFF: %s: wrong number of attributes on line %d\n",
 			fileName, lineNum)
-		m.matrix = append(m.matrix, make([]float64, m.cols, m.cols+
-			EXTRA_NUM_CELL))
+		m.matrix = append(m.matrix, make([]float64, m.cols))
 		for j := 0; j < len(s); j++ {
 			if s[j] == "?" {
 				m.matrix[row][j] = UNKNOWN_VALUE
@@ -595,18 +587,23 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) {
 		row++
 	}
 	m.rows = row
+	m.data = make(Vector, m.rows*m.cols)
+	for i := 0; i < m.rows; i++ {
+		copy(m.data[i*m.cols:], m.matrix[i])
+		m.matrix[i] = m.data[i*m.cols : (i+1)*m.cols]
+	}
 }
 
 // SubMatrix copy the content of a submatrix of a matrix determined
 // by the list of column indices and row indices. This operation
 // allows duplicating rows and columns.
 func (m *Matrix) SubMatrix(s *Matrix, rows, cols []int) {
-	if len(rows) != s.rows || len(cols) != s.cols {
-		s = NewMatrix(len(rows), len(cols))
+	if len(rows) != m.rows || len(cols) != m.cols {
+		m = NewMatrix(len(rows), len(cols), nil)
 	}
 	for i := 0; i < len(rows); i++ {
 		for j := 0; j < len(cols); j++ {
-			s.matrix[i][j] = m.matrix[rows[i]][cols[j]]
+			m.matrix[i][j] = s.matrix[rows[i]][cols[j]]
 		}
 	}
 }
@@ -691,7 +688,7 @@ func (m *Matrix) PermuteCols(P permutation) {
 // PermuteRows change the rows of the matrix due to a permutation.
 func (m *Matrix) PermuteRows(P permutation) {
 	if m.rows != len(P) {
-		panic("PermuteCols: permutation is of the wrong size\n")
+		panic("PermuteRows: permutation is of the wrong size\n")
 	}
 	i := 0
 	for i < len(P) {
@@ -743,7 +740,6 @@ func (m *Matrix) LeastSquare(b Vector) Vector {
 			b[i] -= colNorm * vk[i]
 		}
 	}
-	fmt.Printf("original b is %v\n", b)
 
 	if rank < m.cols { // if rank is deficient
 		oldrow := m.rows
@@ -759,13 +755,8 @@ func (m *Matrix) LeastSquare(b Vector) Vector {
 		}
 
 		b = b[:rank]
-		fmt.Printf("low rank b is %v\n", b)
 		vk = vk[:n.rows]
-		fmt.Printf("n is \n%v\n", n)
 		_, vk1 := n.QR(&rP, &cP)
-
-		fmt.Printf("rP is %v and cP is %v\n", rP, cP)
-		fmt.Printf("after qr, n is \n%v\n", n)
 
 		// forward substitution
 		x[0] = b[cP[0]] / n.matrix[0][cP[0]]
@@ -790,14 +781,14 @@ func (m *Matrix) LeastSquare(b Vector) Vector {
 				x[i] -= xDotVk * vk[i]
 			}
 		}
-		fmt.Printf("x is %v\n", x)
+
 		for i := 0; i < m.cols; i++ {
 			n.matrix[i][0] = x[i]
 		}
 		for i := 0; i < m.cols; i++ {
 			x[rP[i]] = n.matrix[i][0]
 		}
-		fmt.Printf("x is %v\n", x)
+
 		return x
 	} else {
 		// backward substitution
