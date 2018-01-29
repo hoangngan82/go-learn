@@ -37,7 +37,7 @@ func (v Vector) String() string {
 	buf.Grow(len(v)*22 + 3 + 2)
 	fmt.Fprintf(&buf, "\n[\n")
 	for i := 0; i < len(v); i++ {
-		fmt.Fprintf(&buf, " %+20.12e\n", v[i])
+		fmt.Fprintf(&buf, " %20.12e\n", v[i])
 	}
 	fmt.Fprintf(&buf, "]\n")
 	return buf.String()

@@ -5,11 +5,11 @@
 package matrix
 
 import (
+	"../rand"
 	"bufio"
 	"bytes"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"sort"
 	"strconv"
@@ -505,7 +505,11 @@ func (m *Matrix) SaveARFF(fileName string) {
 }
 
 // LoadARFF loads data from ARFF file to a matrix
-func (m *Matrix) LoadARFF(fileName, timeZone string) *Matrix {
+func (m *Matrix) LoadARFF(fileName string, tz ...string) *Matrix {
+	timeZone := "-06:00"
+	if len(tz) > 0 {
+		timeZone = tz[0]
+	}
 	fileio, err := os.Open(fileName)
 	Require(err == nil, "LoadARFF: %v\n", err)
 	defer fileio.Close()
@@ -635,22 +639,9 @@ func (m *Matrix) LoadARFF(fileName, timeZone string) *Matrix {
 // to the matrix m. It will truncate any data that is out of bound on
 // the matrix m.
 func (m *Matrix) CopyRows(s *Matrix, start, end []int) {
-	var rows int
 	N := len(start)
 	if N > len(end) {
 		N = len(end)
-	}
-
-	Require(end[len(end)-1] <= s.rows,
-		"CopyRows: last element of end must less than number of columns.\n")
-	Require(start[0] <= end[0], "CopyRows: end[%d] < start[%d]\n",
-		end[0], start[0])
-	rows += end[0] - start[0]
-	for i := 1; i < N; i++ {
-		Require(start[i] < end[i] && start[i] > end[i-1],
-			"CopyRows: end[%d] <= start[%d] || start[%d] <= end[%d]\n",
-			end[i], start[i], start[i], end[i-1])
-		rows += end[i] - start[i]
 	}
 
 	copy(m.attrName, s.attrName)
@@ -658,8 +649,15 @@ func (m *Matrix) CopyRows(s *Matrix, start, end []int) {
 	copy(m.enum_to_str, s.enum_to_str)
 
 	row := 0
-	for i := 0; i < N; i++ {
-		for j := start[i]; j < end[i] && j < m.rows; j++ {
+	for j := start[0]; j < end[0] && j < m.rows && j < s.rows; j++ {
+		copy(m.matrix[row], s.matrix[j])
+		row++
+	}
+	for i := 1; i < N; i++ {
+		if start[i] < end[i-1] {
+			start[i] = end[i-1]
+		}
+		for j := start[i]; j < end[i] && j < m.rows && j < s.rows; j++ {
 			copy(m.matrix[row], s.matrix[j])
 			row++
 		}
@@ -668,24 +666,12 @@ func (m *Matrix) CopyRows(s *Matrix, start, end []int) {
 
 // WrapRows wraps a matrix around rows between start[i] and end[i]
 // of matrix m.
-func (s *Matrix) WrapRows(start, end []int) *Matrix {
-	var m *Matrix
+func (m *Matrix) WrapRows(s *Matrix, start, end []int) {
 	m.cols = s.cols
-	N := len(start)
-	if N > len(end) {
-		N = len(end)
-	}
-
-	Require(end[len(end)-1] <= s.rows,
-		"WrapRows: last element of end must less than number of columns.\n")
-	Require(start[0] <= end[0], "WrapRows: end[%d] < start[%d]\n",
-		end[0], start[0])
-	m.rows = end[0] - start[0]
-	for i := 1; i < N; i++ {
-		Require(start[i] < end[i] && start[i] > end[i-1],
-			"WrapRows: end[%d] <= start[%d] || start[%d] <= end[%d]\n",
-			end[i], start[i], start[i], end[i-1])
-		m.rows += end[i] - start[i]
+	if cap(m.matrix) < s.rows {
+		m.matrix = make([]Vector, 0, s.rows)
+	} else {
+		m.matrix = m.matrix[:0]
 	}
 
 	m.relation = s.relation
@@ -693,15 +679,26 @@ func (s *Matrix) WrapRows(start, end []int) *Matrix {
 	m.str_to_enum = s.str_to_enum
 	m.enum_to_str = s.enum_to_str
 
+	N := len(start)
+	if N > len(end) {
+		N = len(end)
+	}
+
 	row := 0
-	m.matrix = make([]Vector, m.rows)
-	for i := 0; i < N; i++ {
-		for j := start[i]; j < end[i]; j++ {
-			m.matrix[row] = s.matrix[j]
+	for j := start[0]; j < end[0] && j < s.rows; j++ {
+		m.matrix = append(m.matrix, s.matrix[j])
+		row++
+	}
+	for i := 1; i < N; i++ {
+		if start[i] < end[i-1] {
+			start[i] = end[i-1]
+		}
+		for j := start[i]; j < end[i] && j < s.rows; j++ {
+			m.matrix = append(m.matrix, s.matrix[j])
 			row++
 		}
 	}
-	return m
+	m.rows = row
 }
 
 // SubMatrix copy the content of a submatrix of a matrix determined
@@ -1076,14 +1073,14 @@ func (m *Matrix) QR(rP, cP *permutation) (int, Vector) {
 
 // Random set a random normal value (0, 1) for each element of the
 // matrix m.
-func (m *Matrix) Random(seed ...int64) *Matrix {
-	var s int64 = 1982
+func (m *Matrix) Random(seed ...uint64) *Matrix {
+	var s uint64 = 1982
 	if len(seed) > 0 {
 		s = seed[0]
 	}
-	r := rand.New(rand.NewSource(s))
+	r := rand.NewRand(s)
 	for i := 0; i < len(m.data); i++ {
-		m.data[i] = r.NormFloat64()
+		m.data[i] = r.Normal()
 	}
 	return m
 }

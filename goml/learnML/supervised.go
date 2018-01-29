@@ -6,6 +6,7 @@ package learnML
 import (
 	"../matrix"
 	"../rand"
+	"math"
 )
 
 type SupervisedLearner interface {
@@ -50,7 +51,7 @@ func SSE(learner SupervisedLearner, features, labels *matrix.Matrix) float64 {
 	matrix.Require(features.Rows() == labels.Rows(),
 		"SSE: Mismatching number of rows\n")
 
-	sse := float64(0)
+	sse := 0.0
 	for i := 0; i < features.Rows(); i++ {
 		pred := learner.Predict(features.Row(i))
 		lab := labels.Row(i)
@@ -64,7 +65,11 @@ func SSE(learner SupervisedLearner, features, labels *matrix.Matrix) float64 {
 
 // perform m-repititions n-fold cross-validation
 func MRepNFoldCrossValidation(learner SupervisedLearner,
-	features, labels *matrix.Matrix, m, n int) float64 {
+	features, labels *matrix.Matrix, m, n int) matrix.Vector {
+
+	matrix.Require(features.Rows() == labels.Rows(),
+		"MRepNFoldCrossValidation: features and labels must have the same number of rows\n")
+
 	// partition
 	start := []int{0, 0}
 	end := []int{0, 0}
@@ -76,15 +81,16 @@ func MRepNFoldCrossValidation(learner SupervisedLearner,
 	for i := 1; i < n; i++ {
 		foldSize[i] = foldSize[0]
 	}
-	for i := 1; i < rows%n; i++ {
-		foldSize[i-1]++
+	for i := 0; i < rows%n; i++ {
+		foldSize[i]++
 	}
 
 	r := rand.NewRand(1982)
-	var trainDataX, testDataX, trainDataY, testDataY *matrix.Matrix
+	var trainDataX, testDataX, trainDataY, testDataY matrix.Matrix
+	sse := matrix.NewVector(m, nil)
 	for i := 0; i < m; i++ {
 		// shuffling data
-		for j := n; j > 1; j++ {
+		for j := rows; j > 1; j-- {
 			l := int(r.Next(uint64(j)))
 			features.SwapRows(j-1, l)
 			labels.SwapRows(j-1, l)
@@ -93,8 +99,8 @@ func MRepNFoldCrossValidation(learner SupervisedLearner,
 		// training
 
 		startRemoveIndex := 0
-		end[1] = features.Rows()
-		var sse float64 = 0
+		end[1] = rows
+		sse[i] = 0.0
 		for j := 0; j < n; j++ {
 			// copy data into training and testing data
 			start = start[:1]
@@ -102,25 +108,26 @@ func MRepNFoldCrossValidation(learner SupervisedLearner,
 			start[0] = startRemoveIndex
 			startRemoveIndex += foldSize[j]
 			end[0] = startRemoveIndex
-			testDataX = features.WrapRows(start, end)
-			testDataY = labels.WrapRows(start, end)
+			testDataX.WrapRows(features, start, end)
+			testDataY.WrapRows(labels, start, end)
 
 			start = start[:2]
 			end = end[:2]
 			start[1] = end[0]
 			end[0] = start[0]
 			start[0] = 0
-			trainDataX = features.WrapRows(start, end)
-			trainDataY = labels.WrapRows(start, end)
+			trainDataX.WrapRows(features, start, end)
+			trainDataY.WrapRows(labels, start, end)
 
 			// train
-			learner.Train(trainDataX, trainDataY)
+			learner.Train(&trainDataX, &trainDataY)
 
 			// compute SSE
-			sse += SSE(learner, testDataX, testDataY)
+			sse[i] += SSE(learner, &testDataX, &testDataY)
 		}
 		// average sse is
-		sse /= float64(n)
+		sse[i] /= float64(rows)
+		sse[i] = math.Sqrt(sse[i])
 	}
-	return 0.0
+	return sse
 }
