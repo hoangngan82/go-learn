@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"math/rand"
 )
 
 type Vector []float64
@@ -18,64 +19,15 @@ func (v Vector) ToMatrix() *Matrix {
 	return NewMatrix(1, len(v), v)
 }
 
-// NewVector creates a vector of length size and set all element
-// to the value vals (default = 0).
-// NewVector(5, 4.3, 3.2, 2.1) gives [4.3, 3.2, 2.1, 4.3, 3.2]
-func NewVector(size int, val ...float64) Vector {
-	v := make([]float64, size, size+EXTRA_NUM_CELL)
-	N := len(val)
-	if N == 0 {
-		return v
+// NewVector wraps a vector around vals.
+func NewVector(size int, vals []float64) Vector {
+	Require(len(vals) == 0 || len(vals) == size,
+		"NewVector: require len(vals) == 0 || len(vals) == size\n")
+	if len(vals) > 0 {
+		return vals
 	}
 
-	for i := 0; i < size; i++ {
-		v[i] = val[i%N]
-	}
-	return v
-}
-
-// SetElem sets the element at index i to val.
-func (v Vector) SetElem(i int, val float64) {
-	Require(i >= 0 && i < len(v),
-		"SetElem: index out of bound: i = %d\n", i)
-	v[i] = val
-}
-
-// SetElems sets the elements at indices to val's.
-func (v Vector) SetElems(indices []int, vals []float64) {
-	Require(len(indices) != 0 && len(vals) != 0,
-		"SetElems: empty index: len(indices) = %d, len(vals) = %d\n",
-		len(indices), len(vals))
-	Require(len(indices) == len(vals),
-		"SetElems: dimension mismatched: len(indices) = %d, "+
-			"len(vals) = %d\n", len(indices), len(vals))
-	for i, val := range vals {
-		v[indices[i]] = val
-	}
-}
-
-// GetElems returns the elements at indices.
-func (v Vector) GetElems(indices []int) Vector {
-	Require(len(indices) != 0,
-		"SetElems: empty index: len(indices) = %d\n",
-		len(indices))
-	for i := 0; i < len(indices); i++ {
-		Require(indices[i] < len(v) && indices[i] >= 0,
-			"SetElems: index out of bound: indices[%d] = %d\n",
-			i, indices[i])
-	}
-	e := NewVector(len(indices))
-	for i := 0; i < len(e); i++ {
-		e[i] = v[indices[i]]
-	}
-	return e
-}
-
-// GetElem returns the element at index i in the Vector.
-func (v Vector) GetElem(i int) float64 {
-	Require(i >= 0 && i < len(v),
-		"SetElem: index out of bound: i = %d\n", i)
-	return v[i]
+	return make(Vector, size)
 }
 
 // String converts a Vector into a string so that it can be printed
@@ -89,11 +41,6 @@ func (v Vector) String() string {
 	}
 	fmt.Fprintf(&buf, "]\n")
 	return buf.String()
-}
-
-// Size return the size of a vector
-func (v Vector) Size() int {
-	return len(v)
 }
 
 // add returns a + sign*b and stores the result in vector a.
@@ -113,7 +60,7 @@ func (a Vector) add(b Vector, sign int) {
 
 // Sub returns the difference a - b.
 func (a Vector) Sub(b Vector) Vector {
-	s := NewVector(len(a))
+	s := make(Vector, len(a))
 	copy(s, a)
 	s.add(b, -1)
 	return s
@@ -121,7 +68,7 @@ func (a Vector) Sub(b Vector) Vector {
 
 // Add returns the sum a + b.
 func (a Vector) Add(b Vector) Vector {
-	s := NewVector(len(a))
+	s := make(Vector, len(a))
 	copy(s, a)
 	s.add(b, 1)
 	return s
@@ -213,11 +160,28 @@ func (b Vector) Permute(P permutation) {
 		}
 		P[prev] = -1 - P[prev]
 	}
+
+	for i := 0; i < len(P); i++ {
+		P[i] = -1 - P[i]
+	}
 }
 
 // Scale scales a vector.
 func (v Vector) Scale(c float64) {
 	for i, _ := range v {
 		v[i] *= c
+	}
+}
+
+// Random set a random normal value (0, 1) for each element of the
+// vector v.
+func (v Vector) Random(seed ...int64) {
+	var s int64 = 1982
+	if len(seed) > 0 {
+		s = seed[0]
+	}
+	r := rand.New(rand.NewSource(s))
+	for i := 0; i < len(v); i++ {
+		v[i] = r.NormFloat64()
 	}
 }
