@@ -42,5 +42,5 @@ func main() {
 	fmt.Printf("PermuteRows is %v\n", start)
 	var l learnML.LayerLinear
 	var n learnML.NeuralNet
-	n.Initialize(1, l)
+	n.Init(1, l)
 }
