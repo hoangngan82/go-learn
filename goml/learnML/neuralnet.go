@@ -15,8 +15,7 @@ func (n *NeuralNet) Init(numLayers int, layerType interface{}) {
 	switch layerType.(type) {
 	case LayerLinear:
 		for i := 0; i < numLayers; i++ {
-			var v LayerLinear
-			n.layers[i] = &v
+			n.layers[i] = &LayerLinear{}
 		}
 	default:
 		panic("Only learnML.LayerLinear is a supported Layer")

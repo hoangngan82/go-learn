@@ -11,7 +11,6 @@ type Layer interface {
 	Activate(weights, x matrix.Vector) matrix.Vector
 	BackProp(weights, prevBlame matrix.Vector)
 	UpdateGradient(x, gradient matrix.Vector)
-	Blame(weights, x matrix.Vector) matrix.Vector
 }
 
 type layer struct {
@@ -19,5 +18,13 @@ type layer struct {
 }
 
 func (l *layer) Activate(weights matrix.Vector, x matrix.Vector) matrix.Vector {
+	panic("not implemented")
+}
+
+func (l *layer) BackProp(weights matrix.Vector, prevBlame matrix.Vector) {
+	panic("not implemented")
+}
+
+func (l *layer) UpdateGradient(x matrix.Vector, gradient matrix.Vector) {
 	panic("not implemented")
 }

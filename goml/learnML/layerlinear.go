@@ -19,16 +19,16 @@ func (l *LayerLinear) Activate(weights, xo matrix.Vector) matrix.Vector {
 	cols := len(weights) / rows
 	M := matrix.NewMatrix(rows, cols, weights)
 	//fmt.Printf("M is %v\n", M)
-	if len(l.activation) == 0 {
-		l.activation = matrix.NewVector(cols, nil)
+	if len(l.layer.activation) == 0 {
+		l.layer.activation = matrix.NewVector(cols, nil)
 	}
-	l.activation.ToMatrix().Mul(x.ToMatrix(), M, false, false)
+	l.layer.activation.ToMatrix().Mul(x.ToMatrix(), M, false, false)
 	//fmt.Printf("M after is %v\n", M)
-	return l.activation
+	return l.layer.activation
 }
 
 func (l *LayerLinear) String() string {
-	return l.activation.String()
+	return l.layer.activation.String()
 }
 
 func (l *LayerLinear) OLS(features, labels *matrix.Matrix) matrix.Vector {
