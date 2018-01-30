@@ -9,7 +9,7 @@ type NeuralNet struct {
 	weights []matrix.Vector
 }
 
-func (n *NeuralNet) Initialize(numLayers int, layerType interface{}) {
+func (n *NeuralNet) Init(numLayers int, layerType interface{}) {
 	n.layers = make([]Layer, numLayers)
 	n.weights = make([]matrix.Vector, numLayers)
 	switch layerType.(type) {
