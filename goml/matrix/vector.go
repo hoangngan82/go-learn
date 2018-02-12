@@ -15,8 +15,12 @@ type Vector []float64
 
 // ToMatrix wraps a 1-by-n matrix around the underlying data of a
 // vector.
-func (v Vector) ToMatrix() *Matrix {
-	return NewMatrix(1, len(v), v)
+func (v Vector) ToMatrix(dim ...int) *Matrix {
+	if len(dim) == 0 {
+		return NewMatrix(1, len(v), v)
+	} else {
+		return NewMatrix(dim[0], len(v)/dim[0], v)
+	}
 }
 
 // NewVector wraps a vector around vals.
@@ -166,11 +170,25 @@ func (b Vector) Permute(P permutation) {
 	}
 }
 
+// Fill fills a vector with value.
+func (v Vector) Fill(val float64) Vector {
+	for i, _ := range v {
+		v[i] = val
+	}
+	return v
+}
+
+// Copy just a wrapper of the built-in function copy.
+func (v Vector) Copy(m Vector) {
+	copy(v, m)
+}
+
 // Scale scales a vector.
-func (v Vector) Scale(c float64) {
+func (v Vector) Scale(c float64) Vector {
 	for i, _ := range v {
 		v[i] *= c
 	}
+	return v
 }
 
 // Random set a random normal value (0, 1) for each element of the

@@ -7,37 +7,75 @@ import (
 	"../matrix"
 )
 
-type LayerLinear struct {
+type layerLinear struct {
 	layer
+	weight matrix.Vector
 }
 
-func (l *LayerLinear) Activate(weights, xo matrix.Vector) matrix.Vector {
-	x := make(matrix.Vector, len(xo)+1)
+// dim = [out[0], inDim, innerDim]. Every layer must have an output
+// dimension. layerLinear must have an input dimension.
+func (l *layerLinear) Init(out Dimension, dim ...Dimension) {
+	matrix.Require(len(dim) > 0, "layerLinear: Init must have two arguments\n")
+	inDim := dim[0][0]
+	l.layer.Init(out)
+	l.weight = matrix.NewVector((inDim+1)*out[0], nil)
+}
+
+/*
+[============ Begin of implementation for the Layer interface
+*/
+
+func (l *layerLinear) Activate(weight matrix.Vector, xo *matrix.Vector) *matrix.Vector {
+	x := matrix.NewVector(len(*xo)+1, nil)
 	rows := len(x)
-	copy(x, xo)
-	x[len(xo)] = 1.0
-	cols := len(weights) / rows
-	M := matrix.NewMatrix(rows, cols, weights)
-	//fmt.Printf("M is %v\n", M)
-	if len(l.layer.activation) == 0 {
-		l.layer.activation = matrix.NewVector(cols, nil)
-	}
+	copy(x, *xo)
+	x[len(*xo)] = 1.0
+	cols := len(weight) / rows
+	M := matrix.NewMatrix(rows, cols, weight)
 	l.layer.activation.ToMatrix().Mul(x.ToMatrix(), M, false, false)
-	//fmt.Printf("M after is %v\n", M)
-	return l.layer.activation
+	return &(l.layer.activation)
 }
 
-func (l *LayerLinear) String() string {
-	return l.layer.activation.String()
+// BackProp computes prevBlame = M^t*blame.
+func (l *layerLinear) BackProp(weight matrix.Vector,
+	prevBlame *matrix.Vector) {
+	cols := len(l.layer.activation)
+	rows := len(weight) / cols
+	var M *matrix.Matrix = &matrix.Matrix{}
+	M.WrapRows(matrix.NewMatrix(rows, cols, weight), []int{0}, []int{rows - 1})
+	(*prevBlame).ToMatrix().Mul(M, l.layer.blame.ToMatrix(), false, true)
 }
 
-func (l *LayerLinear) OLS(features, labels *matrix.Matrix) matrix.Vector {
-	x := matrix.NewMatrix(features.Rows(), features.Cols()+1, nil)
-	y := matrix.NewMatrix(labels.Rows(), labels.Cols(), nil)
-	start := []int{0}
-	end := []int{x.Rows()}
-	x.CopyRows(features, start, end)
-	y.CopyRows(labels, start, end)
-	x.FillCol(-1, 1)
-	return x.LeastSquare(y).ToVector()
+// Gradient is the derivative with respect to the weight. Thus, it
+// has the same length as the weight.
+func (l *layerLinear) UpdateGradient(in *matrix.Vector, gradient *matrix.Vector) {
+	x := *in
+	cols := len(l.layer.blame)
+	rows := len(*gradient) / cols
+	// compute M += blame.OuterProd(x)
+	for i := 0; i < rows-1; i++ {
+		temp := (*gradient)[i*cols : (i+1)*cols]
+		for j := 0; j < cols; j++ {
+			temp[j] += l.layer.blame[j] * x[i]
+		}
+	}
+
+	// compute b += blame
+	i := rows - 1
+	temp := (*gradient)[i*cols : (i+1)*cols]
+	for j := 0; j < cols; j++ {
+		temp[j] += l.layer.blame[j]
+	}
 }
+
+func (l *layerLinear) Activation() *matrix.Vector {
+	return &(l.layer.activation)
+}
+
+func (l *layerLinear) Blame() *matrix.Vector {
+	return &(l.layer.blame)
+}
+
+/*
+]============ End of implementation for the Layer interface
+*/

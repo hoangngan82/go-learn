@@ -664,10 +664,24 @@ func (m *Matrix) CopyRows(s *Matrix, start, end []int) {
 	}
 }
 
-// WrapRows wraps a matrix around rows between start[i] and end[i]
-// of matrix m.
-func (m *Matrix) WrapRows(s *Matrix, start, end []int) {
-	m.cols = s.cols
+// WrapRowsCols wraps a matrix around rows between start[i] and end[i]
+// of matrix m for columns from colBegin to colEnd. colBegin must be less
+// than s.cols and colEnd must be larger than 0.
+// colBegin = colIdx[0] and colEnd = colIdx[1].
+func (m *Matrix) WrapRows(s *Matrix, start, end []int, colIdx ...int) {
+	colBegin := 0
+	colEnd := s.cols
+	if len(colIdx) > 0 {
+		if colIdx[0] > 0 && colIdx[0] < s.cols {
+			colBegin = colIdx[0]
+		}
+		if len(colIdx) > 1 {
+			if colIdx[1] > colBegin && colIdx[1] <= s.cols {
+				colEnd = colIdx[1]
+			}
+		}
+	}
+	m.cols = colEnd - colBegin
 	if cap(m.matrix) < s.rows {
 		m.matrix = make([]Vector, 0, s.rows)
 	} else {
@@ -675,9 +689,9 @@ func (m *Matrix) WrapRows(s *Matrix, start, end []int) {
 	}
 
 	m.relation = s.relation
-	m.attrName = s.attrName
-	m.str_to_enum = s.str_to_enum
-	m.enum_to_str = s.enum_to_str
+	m.attrName = s.attrName[colBegin:colEnd]
+	m.str_to_enum = s.str_to_enum[colBegin:colEnd]
+	m.enum_to_str = s.enum_to_str[colBegin:colEnd]
 
 	N := len(start)
 	if N > len(end) {
@@ -686,7 +700,7 @@ func (m *Matrix) WrapRows(s *Matrix, start, end []int) {
 
 	row := 0
 	for j := start[0]; j < end[0] && j < s.rows; j++ {
-		m.matrix = append(m.matrix, s.matrix[j])
+		m.matrix = append(m.matrix, s.matrix[j][colBegin:colEnd])
 		row++
 	}
 	for i := 1; i < N; i++ {
@@ -694,7 +708,7 @@ func (m *Matrix) WrapRows(s *Matrix, start, end []int) {
 			start[i] = end[i-1]
 		}
 		for j := start[i]; j < end[i] && j < s.rows; j++ {
-			m.matrix = append(m.matrix, s.matrix[j])
+			m.matrix = append(m.matrix, s.matrix[j][colBegin:colEnd])
 			row++
 		}
 	}
@@ -1088,4 +1102,16 @@ func (m *Matrix) Random(seed ...uint64) *Matrix {
 // ToVector wraps a vector around m.data.
 func (m *Matrix) ToVector() Vector {
 	return m.data
+}
+
+// OLS return the weights in approximating labels = M*features + b.
+func OLS(features, labels *Matrix) Vector {
+	x := NewMatrix(features.Rows(), features.Cols()+1, nil)
+	y := NewMatrix(labels.Rows(), labels.Cols(), nil)
+	start := []int{0}
+	end := []int{x.Rows()}
+	x.CopyRows(features, start, end)
+	y.CopyRows(labels, start, end)
+	x.FillCol(-1, 1)
+	return x.LeastSquare(y).ToVector()
 }
