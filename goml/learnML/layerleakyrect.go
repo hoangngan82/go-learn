@@ -11,8 +11,7 @@ type layerLeakyRectifier struct {
 	layer
 }
 
-func (l *layerLeakyRectifier) Activate(weight matrix.Vector,
-	x *matrix.Vector) *matrix.Vector {
+func (l *layerLeakyRectifier) Activate(x *matrix.Vector) *matrix.Vector {
 	if len(l.layer.activation) != len(*x) {
 		l.layer.activation = matrix.NewVector(len(*x), nil)
 	}
@@ -26,7 +25,7 @@ func (l *layerLeakyRectifier) Activate(weight matrix.Vector,
 	return &(l.layer.activation)
 }
 
-func (l *layerLeakyRectifier) BackProp(weight matrix.Vector, prevBlame *matrix.Vector) {
+func (l *layerLeakyRectifier) BackProp(prevBlame *matrix.Vector) {
 	if len(*prevBlame) != len(l.layer.activation) {
 		*prevBlame = matrix.NewVector(len(l.layer.activation), nil)
 	}
@@ -38,4 +37,14 @@ func (l *layerLeakyRectifier) BackProp(weight matrix.Vector, prevBlame *matrix.V
 			v[i] = 1.0
 		}
 	}
+}
+
+func (l *layerLeakyRectifier) Copy(activation, blame matrix.Vector) Layer {
+	var c layerLeakyRectifier
+	c.layer = *(l.layer.Copy(activation, blame).(*layer))
+	return &c
+}
+
+func (l *layerLeakyRectifier) Name() string {
+	return "Layer Leaky Rectifier"
 }

@@ -25,24 +25,23 @@ func (l *layerLinear) Init(out Dimension, dim ...Dimension) {
 [============ Begin of implementation for the Layer interface
 */
 
-func (l *layerLinear) Activate(weight matrix.Vector, xo *matrix.Vector) *matrix.Vector {
+func (l *layerLinear) Activate(xo *matrix.Vector) *matrix.Vector {
 	x := matrix.NewVector(len(*xo)+1, nil)
 	rows := len(x)
 	copy(x, *xo)
 	x[len(*xo)] = 1.0
-	cols := len(weight) / rows
-	M := matrix.NewMatrix(rows, cols, weight)
+	cols := len(l.weight) / rows
+	M := matrix.NewMatrix(rows, cols, l.weight)
 	l.layer.activation.ToMatrix().Mul(x.ToMatrix(), M, false, false)
 	return &(l.layer.activation)
 }
 
 // BackProp computes prevBlame = M^t*blame.
-func (l *layerLinear) BackProp(weight matrix.Vector,
-	prevBlame *matrix.Vector) {
+func (l *layerLinear) BackProp(prevBlame *matrix.Vector) {
 	cols := len(l.layer.activation)
-	rows := len(weight) / cols
+	rows := len(l.weight) / cols
 	var M *matrix.Matrix = &matrix.Matrix{}
-	M.WrapRows(matrix.NewMatrix(rows, cols, weight), []int{0}, []int{rows - 1})
+	M.WrapRows(matrix.NewMatrix(rows, cols, l.weight), []int{0}, []int{rows - 1})
 	(*prevBlame).ToMatrix().Mul(M, l.layer.blame.ToMatrix(), false, true)
 }
 
@@ -74,6 +73,10 @@ func (l *layerLinear) Activation() *matrix.Vector {
 
 func (l *layerLinear) Blame() *matrix.Vector {
 	return &(l.layer.blame)
+}
+
+func (l *layerLinear) Name() string {
+	return "Layer Linear"
 }
 
 /*

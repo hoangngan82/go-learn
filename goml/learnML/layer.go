@@ -1,6 +1,9 @@
 // Package learnML contains all my answer to homework for the class
 // ISYS 5063 - Machine Learning, taught by Michael Gashler at UARK,
 // Fayetteville, AR.
+// Only layerLinear has weight. Thus, we move weight to LayerLinear
+// and because of that Activate and BackProp functions do not need
+// the weight parameter.
 package learnML
 
 import (
@@ -18,13 +21,15 @@ const (
 )
 
 type Layer interface {
-	Activate(weight matrix.Vector, x *matrix.Vector) *matrix.Vector
-	BackProp(weight matrix.Vector, prevBlame *matrix.Vector)
+	Activate(x *matrix.Vector) *matrix.Vector
+	BackProp(prevBlame *matrix.Vector)
 	UpdateGradient(x *matrix.Vector, gradient *matrix.Vector)
 	Activation() *matrix.Vector
 	Blame() *matrix.Vector
 	Init(out Dimension, dim ...Dimension)
 	OutDim() Dimension
+	Copy(activation, blame matrix.Vector) Layer
+	Name() string
 }
 
 func NewLayer(t LayerType, out Dimension, dim ...Dimension) Layer {
@@ -60,7 +65,7 @@ func (l *layer) Init(out Dimension, dim ...Dimension) {
 }
 
 // layer.Activate returns the input.
-func (l *layer) Activate(weight matrix.Vector, x *matrix.Vector) *matrix.Vector {
+func (l *layer) Activate(x *matrix.Vector) *matrix.Vector {
 	if len(l.activation) != len(*x) {
 		l.activation = matrix.NewVector(len(*x), nil)
 	}
@@ -70,7 +75,7 @@ func (l *layer) Activate(weight matrix.Vector, x *matrix.Vector) *matrix.Vector 
 
 // layer.BackProp returns the derivative of the identity activation
 // function, which is 1.
-func (l *layer) BackProp(weight matrix.Vector, prevBlame *matrix.Vector) {
+func (l *layer) BackProp(prevBlame *matrix.Vector) {
 	if len(*prevBlame) != len(l.activation) {
 		*prevBlame = matrix.NewVector(len(l.activation), nil)
 	}
@@ -87,4 +92,30 @@ func (l *layer) Activation() *matrix.Vector {
 
 func (l *layer) Blame() *matrix.Vector {
 	return &(l.blame)
+}
+
+func (l *layer) Copy(activation, blame matrix.Vector) Layer {
+	matrix.Require(len(activation) == 0 || len(activation) == len(l.activation),
+		"layer: Copy: require len(activation) == 0 || len(activation) == len(l.activation)")
+	matrix.Require(len(blame) == 0 || len(blame) == len(l.blame),
+		"layer: Copy: require len(blame) == 0 || len(blame) == len(l.blame)")
+	var c layer
+	n := len(l.activation)
+	if len(activation) == 0 {
+		c.activation = make(matrix.Vector, n)
+	} else {
+		c.activation = activation
+	}
+	if len(blame) == 0 {
+		c.blame = make(matrix.Vector, n)
+	} else {
+		c.blame = blame
+	}
+	copy(c.activation, l.activation)
+	copy(c.blame, l.blame)
+	return &c
+}
+
+func (l *layer) Name() string {
+	return "Identity Layer"
 }

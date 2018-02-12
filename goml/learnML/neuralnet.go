@@ -157,28 +157,27 @@ func (n *neuralNet) TrainIncremental(feat matrix.Vector, lab matrix.Vector) {
 //n.Init([]int{2, 3}, learnML.layerTanh{}, 2, 3)
 //n.InitWeight()
 //x := matrix.Vector{1, 1}
-//fmt.Printf("activation is %v\n", n.Activate(matrix.Vector{}, &x))
+//fmt.Printf("activation is %v\n", n.Activate(&x))
 //fmt.Printf("n is %v\n", n)
 //x = matrix.Vector{1, -1}
-//fmt.Printf("activation is %v\n", n.Activate(matrix.Vector{}, &x))
+//fmt.Printf("activation is %v\n", n.Activate(&x))
 //fmt.Printf("n is %v\n", n)
 //}
 // Activate activates the whole network based on the input in.
-func (n *neuralNet) Activate(dummy matrix.Vector,
-	in *matrix.Vector) *matrix.Vector {
+func (n *neuralNet) Activate(in *matrix.Vector) *matrix.Vector {
 	activation := in
 	for i := 0; i < len(n.linearLayer); i++ {
 		// apply linear layer
-		activation = n.linearLayer[i].Activate(n.linearLayer[i].weight, activation)
+		activation = n.linearLayer[i].Activate(activation)
 		// apply activation function
-		activation = n.activatingLayer[i].Activate(matrix.Vector{}, activation)
+		activation = n.activatingLayer[i].Activate(activation)
 	}
 	return activation
 }
 
 // Predict will call neuralNet.Activate to compute predictions.
 func (n *neuralNet) Predict(in matrix.Vector) matrix.Vector {
-	return *(n.Activate(matrix.Vector{}, &in))
+	return *(n.Activate(&in))
 }
 
 // neuralNet.BackProp computes blame for each linear layer. We need
@@ -188,15 +187,14 @@ func (n *neuralNet) BackProp(target matrix.Vector, prevBlame *matrix.Vector) {
 	output := *(n.activatingLayer[N-1].Activation())
 	output = target.Sub(output).Scale(2.0)
 	var m matrix.Vector = matrix.Vector{}
-	n.activatingLayer[N-1].BackProp(matrix.Vector{}, &m)
+	n.activatingLayer[N-1].BackProp(&m)
 	for i := 0; i < len(output); i++ {
 		n.linearLayer[N-1].layer.blame[i] = output[i] * m[i]
 	}
 
 	for i := N - 1; i > 0; i-- {
-		n.activatingLayer[i-1].BackProp(n.linearLayer[i-1].weight, &m)
-		n.linearLayer[i].BackProp(n.linearLayer[i].weight,
-			n.linearLayer[i-1].Blame())
+		n.activatingLayer[i-1].BackProp(&m)
+		n.linearLayer[i].BackProp(n.linearLayer[i-1].Blame())
 		for j := 0; j < len(m); j++ {
 			n.linearLayer[i-1].layer.blame[j] *= m[j]
 		}
@@ -235,18 +233,18 @@ func (n *neuralNet) CentralDifference(in, out *matrix.Vector,
 	dt float64, g *[]matrix.Vector) {
 	gradient := *g
 	var m, p, diff matrix.Vector
-	m = *(n.Activate(matrix.Vector{}, in))
+	m = *(n.Activate(in))
 	diff = (*out).Sub(m)
 
 	for i := 0; i < len(n.linearLayer); i++ {
 		for j := 0; j < len(n.linearLayer[i].weight); j++ {
 			oldWeight := n.linearLayer[i].weight[j]
 			n.linearLayer[i].weight[j] = oldWeight + dt/2.0
-			m = *(n.Activate(matrix.Vector{}, in))
+			m = *(n.Activate(in))
 			p = matrix.NewVector(len(m), nil)
 			p.Copy(m)
 			n.linearLayer[i].weight[j] = oldWeight - dt/2.0
-			m = *(n.Activate(matrix.Vector{}, in))
+			m = *(n.Activate(in))
 			m = p.Sub(m)
 			n.linearLayer[i].weight[j] = oldWeight
 			gradient[i][j] = 2.0 * m.Scale(1.0/dt).Dot(diff)

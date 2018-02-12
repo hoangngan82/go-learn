@@ -12,8 +12,7 @@ type layerTanh struct {
 	layer
 }
 
-func (l *layerTanh) Activate(weight matrix.Vector,
-	x *matrix.Vector) *matrix.Vector {
+func (l *layerTanh) Activate(x *matrix.Vector) *matrix.Vector {
 	if len(l.layer.activation) != len(*x) {
 		l.layer.activation = matrix.NewVector(len(*x), nil)
 	}
@@ -23,7 +22,7 @@ func (l *layerTanh) Activate(weight matrix.Vector,
 	return &(l.layer.activation)
 }
 
-func (l *layerTanh) BackProp(weight matrix.Vector, prevBlame *matrix.Vector) {
+func (l *layerTanh) BackProp(prevBlame *matrix.Vector) {
 	if len(*prevBlame) != len(l.layer.activation) {
 		*prevBlame = matrix.NewVector(len(l.layer.activation), nil)
 	}
@@ -31,4 +30,8 @@ func (l *layerTanh) BackProp(weight matrix.Vector, prevBlame *matrix.Vector) {
 	for i := 0; i < len(v); i++ {
 		v[i] = 1.0 - l.layer.activation[i]*l.layer.activation[i]
 	}
+}
+
+func (l *layerTanh) Name() string {
+	return "Layer Tanh"
 }
