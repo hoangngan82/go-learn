@@ -3,6 +3,9 @@ package learnML
 import (
 	"../matrix"
 	"../rand"
+	"gonum.org/v1/gonum/floats"
+	//"fmt"
+	"time"
 )
 
 // According to new considerations:
@@ -19,7 +22,7 @@ type neuralNet struct {
 
 // InDim return the dimension of the input of a neural network.
 func (n *neuralNet) InDim() Dimension {
-	d := len(n.linearLayer[0].weight)/len(n.linearLayer[0].layer.activation) - 1
+	d := len(n.linearLayer[0].weight)/len(n.linearLayer[0].activation) - 1
 	return Dimension{d}
 }
 
@@ -31,7 +34,7 @@ func (n *neuralNet) OutDim() Dimension {
 
 func (n *neuralNet) AddLayer(t Layer) {
 	linear := layerLinear{}
-	linear.Init(t.OutDim(), n.OutDim())
+	linear.init(t.OutDim()[0], n.OutDim()[0])
 	n.linearLayer = append(n.linearLayer, linear)
 	n.activatingLayer = append(n.activatingLayer, t)
 }
@@ -50,8 +53,7 @@ func NewNeuralNet(unitsPerLayers []int, layerType LayerType,
 	n.linearLayer = make([]layerLinear, N)
 	inDim := numFeatures
 	for i := 0; i < N; i++ {
-		n.linearLayer[i].Init(Dimension{unitsPerLayers[i]},
-			Dimension{inDim})
+		n.linearLayer[i].init(unitsPerLayers[i], inDim)
 		inDim = unitsPerLayers[i]
 	}
 
@@ -63,19 +65,19 @@ func NewNeuralNet(unitsPerLayers []int, layerType LayerType,
 	case LayerTanh:
 		for i := 0; i < N; i++ {
 			m := layerTanh{}
-			m.Init(Dimension{unitsPerLayers[i]})
+			m.init(Dimension{unitsPerLayers[i]})
 			n.activatingLayer[i] = &m
 		}
 	case LayerLeakyRectifier:
 		for i := 0; i < N; i++ {
 			m := layerLeakyRectifier{}
-			m.Init(Dimension{unitsPerLayers[i]})
+			m.init(Dimension{unitsPerLayers[i]})
 			n.activatingLayer[i] = &m
 		}
 	default:
 		for i := 0; i < N; i++ {
 			m := layer{}
-			m.Init(Dimension{unitsPerLayers[i]})
+			m.init(Dimension{unitsPerLayers[i]})
 			n.activatingLayer[i] = &m
 		}
 	}
@@ -107,16 +109,17 @@ func (n *neuralNet) InitWeight(w []matrix.Vector) {
 		return
 	}
 
-	r := rand.NewRand(262018)
+	r := rand.NewRand(2162018)
+	//r := rand.NewRand(uint64(time.Now().UnixNano()))
 	for i := 0; i < len(n.linearLayer); i++ {
-		max := 1.0 / float64(len(n.linearLayer[i].weight))
+		outputCount := len(n.linearLayer[i].activation)
+		inputCount := len(n.linearLayer[i].weight)/outputCount - 1
+		max := 1.0 / float64(inputCount)
 		if max < 0.03 {
 			max = 0.03
 		}
 		for j := 0; j < len(n.linearLayer[i].weight); j++ {
-			n.linearLayer[i].weight[j] = 0.03 * r.Normal()
-			// for testing: tested on 2018-02-07 21:58
-			//n.linearLayer[i].weight[j] = float64(i + j) // 100.0
+			n.linearLayer[i].weight[j] = max * r.Normal()
 		}
 	}
 }
@@ -125,25 +128,88 @@ func (n *neuralNet) Name() string {
 	if n == nil {
 		return "empty neuralNet"
 	}
-	var layerType interface{}
-	layerType = n.linearLayer[0]
-	switch layerType.(type) {
-	case *layerTanh:
-		return "neuralNet: layerTanh"
-	default:
-		return "neuralNet: layerLinear"
+	s := "\ninput => "
+	for i := 0; i < len(n.activatingLayer); i++ {
+		s += "Layer Linear -> " + n.activatingLayer[i].Name() + " -> "
 	}
+	s += "output\n"
+	return s
 }
 
-// Train trains the model and stores weight in weight[0].
+// Train trains the model and stores weight in weights from the
+// linear layers.
 func (n *neuralNet) Train(features, labels *matrix.Matrix) {
-	var layerType interface{}
-	layerType = n.linearLayer[0]
-	switch layerType.(type) {
-	case *layerTanh:
-		panic("Currently, only layerLinear is supported")
-	default:
-		n.linearLayer[0].weight = matrix.OLS(features, labels)
+	// We will load epochPerPeriod, batchSize, learningRate from a
+	// file. If the file does not exist, use default values
+	r := rand.NewRand(uint64(time.Now().UnixNano()))
+	epochPerPeriod := 1
+	learningRate := .03
+	batchSize := 1
+	// load values from file
+	rows := labels.Rows()
+	if batchSize > rows {
+		batchSize = rows
+	}
+	numBatch := rows / batchSize
+	largeBatch := rows % batchSize
+	for numBatch < largeBatch {
+		batchSize++
+		numBatch = rows / batchSize
+		largeBatch = rows % batchSize
+	}
+	gradient := n.CreateGradient()
+
+	// loop through epochs per period
+	for j := 0; j < epochPerPeriod; j++ {
+		// shuffle data
+		for rr := rows; rr > 1; rr-- {
+			l := int(r.Next(uint64(rr)))
+			features.SwapRows(rr-1, l)
+			labels.SwapRows(rr-1, l)
+		}
+
+		// now loop through batches
+		var start, end int
+		batchSize++
+		start = 0
+		for b := 0; b < largeBatch; b++ {
+			end = start + batchSize
+			ResetGradient(gradient)
+			for s := start; s < end; s++ {
+				x := features.Row(s)
+				y := labels.Row(s)
+				n.Activate(&x)
+				n.BackProp(y, nil)
+				n.UpdateGradient(&x, gradient)
+			}
+			//n.RefineWeight(gradient, learningRate/float64(batchSize))
+			n.RefineWeight(gradient, learningRate)
+			start = end
+		}
+		batchSize--
+		for b := largeBatch; b < numBatch; b++ {
+			end = start + batchSize
+			ResetGradient(gradient)
+			for s := start; s < end; s++ {
+				x := features.Row(s)
+				y := labels.Row(s)
+				n.Activate(&x)
+				n.BackProp(y, nil)
+				n.UpdateGradient(&x, gradient)
+			}
+			//fmt.Printf("\nat b = %7d, grad = ", b)
+			//for p := 0; p < len(*gradient); p++ {
+			//fmt.Printf("%20.15e ", (*gradient)[p].Norm(0))
+			//}
+			//fmt.Printf("\nweight = ")
+			//n.RefineWeight(gradient, learningRate/float64(batchSize))
+			n.RefineWeight(gradient, learningRate)
+			//weight, _ := n.Weight()
+			//for p := 0; p < len(*gradient); p++ {
+			//fmt.Printf("%20.15e ", weight[p].Norm(0))
+			//}
+			start = end
+		}
 	}
 }
 
@@ -151,21 +217,12 @@ func (n *neuralNet) TrainIncremental(feat matrix.Vector, lab matrix.Vector) {
 	panic("not implemented")
 }
 
-// tested on 2018-02-07 21:59
-//func main() {
-//var n learnML.neuralNet
-//n.Init([]int{2, 3}, learnML.layerTanh{}, 2, 3)
-//n.InitWeight()
-//x := matrix.Vector{1, 1}
-//fmt.Printf("activation is %v\n", n.Activate(&x))
-//fmt.Printf("n is %v\n", n)
-//x = matrix.Vector{1, -1}
-//fmt.Printf("activation is %v\n", n.Activate(&x))
-//fmt.Printf("n is %v\n", n)
-//}
 // Activate activates the whole network based on the input in.
 func (n *neuralNet) Activate(in *matrix.Vector) *matrix.Vector {
-	activation := in
+	activation := &matrix.Vector{}
+	*activation = make(matrix.Vector, len(*in))
+	copy(*activation, *in)
+
 	for i := 0; i < len(n.linearLayer); i++ {
 		// apply linear layer
 		activation = n.linearLayer[i].Activate(activation)
@@ -185,20 +242,26 @@ func (n *neuralNet) Predict(in matrix.Vector) matrix.Vector {
 func (n *neuralNet) BackProp(target matrix.Vector, prevBlame *matrix.Vector) {
 	N := len(n.activatingLayer)
 	output := *(n.activatingLayer[N-1].Activation())
-	output = target.Sub(output).Scale(2.0)
+	output = target.Sub(output)
 	var m matrix.Vector = matrix.Vector{}
 	n.activatingLayer[N-1].BackProp(&m)
-	for i := 0; i < len(output); i++ {
-		n.linearLayer[N-1].layer.blame[i] = output[i] * m[i]
-	}
+	floats.MulTo(n.linearLayer[N-1].blame, output, m)
+	//for i := 0; i < len(output); i++ {
+	//n.linearLayer[N-1].blame[i] = output[i] * m[i]
+	//}
 
 	for i := N - 1; i > 0; i-- {
 		n.activatingLayer[i-1].BackProp(&m)
-		n.linearLayer[i].BackProp(n.linearLayer[i-1].Blame())
-		for j := 0; j < len(m); j++ {
-			n.linearLayer[i-1].layer.blame[j] *= m[j]
-		}
+		n.linearLayer[i].BackProp(&(n.linearLayer[i-1].blame))
+		floats.Mul(n.linearLayer[i-1].blame, m)
+		//for j := 0; j < len(m); j++ {
+		//n.linearLayer[i-1].blame[j] *= m[j]
+		//}
 	}
+}
+
+func (n *neuralNet) ResetGradient(gradient *[]matrix.Vector) {
+	ResetGradient(gradient)
 }
 
 func ResetGradient(g *[]matrix.Vector) {
@@ -247,37 +310,37 @@ func (n *neuralNet) CentralDifference(in, out *matrix.Vector,
 			m = *(n.Activate(in))
 			m = p.Sub(m)
 			n.linearLayer[i].weight[j] = oldWeight
-			gradient[i][j] = 2.0 * m.Scale(1.0/dt).Dot(diff)
+			gradient[i][j] = m.Scale(1.0 / dt).Dot(diff)
 		}
 	}
 }
 
 func (n *neuralNet) CreateGradient() *[]matrix.Vector {
-	var g *[]matrix.Vector = &([]matrix.Vector{})
-	*g = make([]matrix.Vector, len(n.linearLayer))
+	g := make([]matrix.Vector, len(n.linearLayer))
 	for i := 0; i < len(n.linearLayer); i++ {
-		(*g)[i] = matrix.NewVector(len(n.linearLayer[i].weight), nil)
+		g[i] = matrix.NewVector(len(n.linearLayer[i].weight), nil)
 	}
-	return g
+	return &g
 }
 
 func (n *neuralNet) RefineWeight(gradient *[]matrix.Vector, rate float64) {
 	g := *gradient
 	for i := 0; i < len(n.linearLayer); i++ {
-		for j := 0; j < len(n.linearLayer[i].weight); j++ {
-			n.linearLayer[i].weight[j] += rate * g[i][j]
-		}
+		floats.AddScaled(n.linearLayer[i].weight, rate, g[i])
+		//for j := 0; j < len(n.linearLayer[i].weight); j++ {
+		//n.linearLayer[i].weight[j] += rate * g[i][j]
+		//}
 	}
 }
 
 // This is to print neural net using fmt.Printf function.
 func (n *neuralNet) String() string {
-	s := "=======    BEGIN: " + n.Name() + " =======\n"
+	s := "=======    BEGIN:    =======\n"
 	for i := 0; i < len(n.linearLayer); i++ {
 		s += "*********************************************************\n"
 		s += "linearLayer: \n - Activation:"
-		act := n.linearLayer[i].layer.activation
-		bla := n.linearLayer[i].layer.blame
+		act := n.linearLayer[i].activation
+		bla := n.linearLayer[i].blame
 		wgh := n.linearLayer[i].weight
 		s += act.String()
 		s += " - Blame:"
@@ -286,12 +349,11 @@ func (n *neuralNet) String() string {
 		cols := len(act)
 		rows := len(wgh) / cols
 		s += wgh.ToMatrix(rows, cols).String()
-		s += "activatingLayer:\n - Activation:"
+		s += "activatingLayer: " + n.activatingLayer[i].Name() +
+			"\n - Activation:"
 		s += (*(n.activatingLayer[i].Activation())).String()
-		s += " - Blame:"
-		s += (*(n.activatingLayer[i].Blame())).String()
 	}
 	s += "*********************************************************\n"
-	s += "=======    END: " + n.Name() + " =======\n"
+	s += "=======    END:    =======\n"
 	return s
 }
