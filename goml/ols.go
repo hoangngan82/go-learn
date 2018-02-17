@@ -40,15 +40,17 @@ func testOLS() {
 	n := learnML.NewNeuralNet([]int{labels.Cols()},
 		learnML.LayerLinear, features.Cols(), labels.Cols())
 	n.InitWeight(nil)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		n.Train(features, dlabel)
 	}
 	_, newWeights2 := n.Weight()
 	diffW = newWeights2.Sub(newWeights).Norm(0)
 	fmt.Println("Difference between OLS and Gradient Descent:")
-	fmt.Printf("max|newWeights2 - newWeights| = %e\n\n",
+	fmt.Println("learning rate .03, after 100 epochs")
+	//fmt.Printf("max|newWeights2 - newWeights| = %e\n\n",
+	fmt.Printf("max|weight(GD) - weight(OLS)| = %e\n\n",
 		diffW/newWeights.Norm(2))
-	fmt.Printf("new2 = %v and new = %v\n", newWeights2, newWeights)
+	fmt.Printf("weight(GD) = %v and weight(OLS) = %v\n", newWeights2, newWeights)
 	if diffW > tol {
 		panic("These weights are too different!")
 	}
@@ -130,7 +132,8 @@ func mnist(numPeriod int) {
 }
 
 func main() {
-	//testOLS()
+	testOLS()
 	//testMRepNFoldCV(1, 10)
-	mnist(50)
+	fmt.Println("\n\nMNIST training with MLP - LayerTanh\n")
+	mnist(10)
 }
