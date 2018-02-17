@@ -3,7 +3,10 @@
 // Fayetteville, AR.
 // Only layerLinear has weight. Thus, we move weight to LayerLinear
 // and because of that Activate and BackProp functions do not need
-// the weight parameter.
+// the weight parameter. Also, LayerLinear's are special because it
+// connects all other nonlinear layers. Since nonlinear layers does
+// backprop different than LayerLinear, we will not consider
+// LayerLinear of type Layer (which is activation function).
 package learnML
 
 import (
@@ -18,17 +21,16 @@ const (
 	LayerTanh
 	LayerConv
 	LayerLeakyRectifier
+	LayerMaxPooling2D
 )
 
 type Layer interface {
 	Activate(x *matrix.Vector) *matrix.Vector
 	BackProp(prevBlame *matrix.Vector)
-	UpdateGradient(x *matrix.Vector, gradient *matrix.Vector)
 	Activation() *matrix.Vector
-	Blame() *matrix.Vector
-	Init(out Dimension, dim ...Dimension)
+	init(out Dimension, dim ...Dimension)
 	OutDim() Dimension
-	Copy(activation, blame matrix.Vector) Layer
+	Copy(activation matrix.Vector) Layer
 	Name() string
 }
 
@@ -37,20 +39,20 @@ func NewLayer(t LayerType, out Dimension, dim ...Dimension) Layer {
 	switch t {
 	case LayerTanh:
 		l = &layerTanh{}
-	case LayerLinear:
-		l = &layerLinear{}
 	case LayerLeakyRectifier:
 		l = &layerLeakyRectifier{}
-	default:
+	case LayerLinear:
 		l = &layer{}
+	default:
+		panic("Unsupported layer type!!!")
 	}
-	l.Init(out, dim...)
+	l.init(out, dim...)
 	return l
 }
 
 // layer implements identity activation function.
 type layer struct {
-	activation, blame matrix.Vector
+	activation matrix.Vector
 }
 
 func (l *layer) OutDim() Dimension {
@@ -59,9 +61,8 @@ func (l *layer) OutDim() Dimension {
 
 // dim = [out, inDim, innerDim]. Every layer must have an output
 // dimension. layerLinear must have an input dimension.
-func (l *layer) Init(out Dimension, dim ...Dimension) {
+func (l *layer) init(out Dimension, dim ...Dimension) {
 	l.activation = matrix.NewVector(out[0], nil)
-	l.blame = matrix.NewVector(out[0], nil)
 }
 
 // layer.Activate returns the input.
@@ -82,23 +83,13 @@ func (l *layer) BackProp(prevBlame *matrix.Vector) {
 	(*prevBlame).Fill(1.0)
 }
 
-func (l *layer) UpdateGradient(x, gradient *matrix.Vector) {
-	panic("not implemented")
-}
-
 func (l *layer) Activation() *matrix.Vector {
 	return &(l.activation)
 }
 
-func (l *layer) Blame() *matrix.Vector {
-	return &(l.blame)
-}
-
-func (l *layer) Copy(activation, blame matrix.Vector) Layer {
+func (l *layer) Copy(activation matrix.Vector) Layer {
 	matrix.Require(len(activation) == 0 || len(activation) == len(l.activation),
 		"layer: Copy: require len(activation) == 0 || len(activation) == len(l.activation)")
-	matrix.Require(len(blame) == 0 || len(blame) == len(l.blame),
-		"layer: Copy: require len(blame) == 0 || len(blame) == len(l.blame)")
 	var c layer
 	n := len(l.activation)
 	if len(activation) == 0 {
@@ -106,13 +97,7 @@ func (l *layer) Copy(activation, blame matrix.Vector) Layer {
 	} else {
 		c.activation = activation
 	}
-	if len(blame) == 0 {
-		c.blame = make(matrix.Vector, n)
-	} else {
-		c.blame = blame
-	}
 	copy(c.activation, l.activation)
-	copy(c.blame, l.blame)
 	return &c
 }
 

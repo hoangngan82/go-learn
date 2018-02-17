@@ -5,6 +5,7 @@ import (
 	"./matrix"
 	"./rand"
 	"fmt"
+	"time"
 )
 
 func testOLS() {
@@ -13,18 +14,16 @@ func testOLS() {
 	weights := matrix.NewMatrix(5, 1, nil)
 	weights.Random()
 	features := matrix.NewMatrix(10, 4, nil)
-	features.Random(111)
+	features.Random(111234)
 
 	labels := matrix.NewMatrix(10, 1, nil)
 	dlabel := matrix.NewMatrix(10, 1, nil)
 
-	l := learnML.NewLayer(learnML.LayerLinear,
-		learnML.Dimension{labels.Cols()},
-		learnML.Dimension{features.Cols()})
+	l := learnML.NewLinearLayer(labels.Cols(), features.Cols(), weights.ToVector())
 	var noiseDeviation float64 = 0.1
 	for i := 0; i < labels.Rows(); i++ {
 		row := features.Row(i)
-		copy(labels.Row(i), *(l.Activate(weights.ToVector(), &row)))
+		copy(labels.Row(i), *(l.Activate(&row)))
 		dlabel.Row(i)[0] = labels.Row(i)[0] + noiseDeviation*r.Normal()
 	}
 
@@ -41,26 +40,15 @@ func testOLS() {
 	n := learnML.NewNeuralNet([]int{labels.Cols()},
 		learnML.LayerLinear, features.Cols(), labels.Cols())
 	n.InitWeight(nil)
-	gradient := n.CreateGradient()
-	rate := 0.05
-	var N int = 100
-	for i := 0; i < N; i++ {
-		learnML.ResetGradient(gradient)
-		for j := 0; j < features.Rows(); j++ {
-			x := features.Row(j)
-			y := dlabel.Row(j)
-			n.Activate(matrix.Vector{}, &x)
-			n.BackProp(y, nil)
-			n.UpdateGradient(&x, gradient)
-		}
-		n.RefineWeight(gradient, rate)
+	for i := 0; i < 10; i++ {
+		n.Train(features, dlabel)
 	}
 	_, newWeights2 := n.Weight()
 	diffW = newWeights2.Sub(newWeights).Norm(0)
 	fmt.Println("Difference between OLS and Gradient Descent:")
-	fmt.Printf("Learning rate = %e and number of epochs is %d\n",
-		rate, N)
-	fmt.Printf("max|newWeights2 - newWeights| = %e\n\n", diffW)
+	fmt.Printf("max|newWeights2 - newWeights| = %e\n\n",
+		diffW/newWeights.Norm(2))
+	fmt.Printf("new2 = %v and new = %v\n", newWeights2, newWeights)
 	if diffW > tol {
 		panic("These weights are too different!")
 	}
@@ -76,13 +64,73 @@ func testMRepNFoldCV(m, n int) {
 	features.LoadARFF("housing_features.arff")
 	labels.LoadARFF("housing_labels.arff")
 	// learnML.LayerLinear{} is an instance of type learmML.LayerLinear
-	N := learnML.NewNeuralNet([]int{1}, learnML.LayerLinear, features.Cols(), labels.Cols())
+	N := learnML.NewNeuralNet([]int{1}, learnML.LayerLinear,
+		features.Cols(), labels.Cols())
 
 	sse = learnML.MRepNFoldCrossValidation(N, &features, &labels, m, n)
-	fmt.Printf("RMSE are %v\n", sse)
+	fmt.Printf("after N is %v\n", N)
+	fmt.Printf("RMSE are %v and row = %d\n", sse, features.Rows())
+}
+
+func mnist(numPeriod int) {
+	var features, labels, testFeatures, testLabels matrix.Matrix
+
+	features.LoadARFF("/home/hoangngan/courses/MIS/machineLearning/mnist/train_feat.arff")
+	labels.LoadARFF("/home/hoangngan/courses/MIS/machineLearning/mnist/train_lab.arff")
+	testFeatures.LoadARFF("/home/hoangngan/courses/MIS/machineLearning/mnist/test_feat.arff")
+	testLabels.LoadARFF("/home/hoangngan/courses/MIS/machineLearning/mnist/test_lab.arff")
+	features.Scale(1.0 / 256.0)
+	testFeatures.Scale(1.0 / 256.0)
+
+	// convert labels to hot-spot representation of a number which is
+	// a list of 10 binary value. If lables[i] = 8 then the 7-th
+	// position of the string will be set (=1). Otherwise, they are all
+	// 0's.
+	mlabels := matrix.NewMatrix(labels.Rows(), 10, nil)
+	for i := 0; i < labels.Rows(); i++ {
+		mlabels.SetElem(i, int(labels.GetElem(i, 0)), 1.0)
+	}
+
+	n := learnML.NewNeuralNet([]int{80, 30, 10}, learnML.LayerTanh,
+		features.Cols(), mlabels.Cols())
+	//n = learnML.NewNeuralNet([]int{98, 10}, learnML.LayerTanh,
+	//features.Cols(), mlabels.Cols())
+	n.InitWeight(nil)
+	var mis int
+	start := time.Now()
+	innerStart := time.Now()
+	for i := 0; i < numPeriod; i++ {
+		fmt.Printf("Training %2d:... ", i)
+		innerStart = time.Now()
+		n.Train(&features, mlabels)
+		fmt.Printf("%5.2fs\tCounting Misclassifications:... ",
+			time.Since(innerStart).Seconds())
+		mis = 0
+		for i := 0; i < testFeatures.Rows(); i++ {
+			pred := n.Predict(testFeatures.Row(i))
+			val := 0
+			max := 0.0
+			for j := 0; j < len(pred); j++ {
+				if pred[j] > max {
+					max = pred[j]
+					val = j
+				} else {
+					if pred[j] < -max {
+						max = -pred[j]
+						val = j
+					}
+				}
+			}
+			if val != int(testLabels.GetElem(i, 0)) {
+				mis++
+			}
+		}
+		fmt.Printf("%d\t%7.2fs\n", mis, time.Since(start).Seconds())
+	}
 }
 
 func main() {
-	testOLS()
-	//testMRepNFoldCV(5, 10)
+	//testOLS()
+	//testMRepNFoldCV(1, 10)
+	mnist(50)
 }

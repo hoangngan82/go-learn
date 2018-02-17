@@ -39,9 +39,9 @@ func (l *layerLeakyRectifier) BackProp(prevBlame *matrix.Vector) {
 	}
 }
 
-func (l *layerLeakyRectifier) Copy(activation, blame matrix.Vector) Layer {
+func (l *layerLeakyRectifier) Copy(activation matrix.Vector) Layer {
 	var c layerLeakyRectifier
-	c.layer = *(l.layer.Copy(activation, blame).(*layer))
+	c.layer = *(l.layer.Copy(activation).(*layer))
 	return &c
 }
 

@@ -81,7 +81,7 @@ func (a Vector) Add(b Vector) Vector {
 // Dot returns the dot product of two vectors.
 func (a Vector) Dot(b Vector) float64 {
 	Require(len(a) == len(b),
-		"Add: dimension mismatch: len(a) == len(b)\n")
+		"Dot: dimension mismatch: len(a) == len(b)\n")
 	d := float64(0)
 	for i := 0; i < len(a); i++ {
 		d += a[i] * b[i]
