@@ -5,7 +5,7 @@ import (
 	"../rand"
 	"gonum.org/v1/gonum/floats"
 	//"fmt"
-	"time"
+	//"time"
 )
 
 // According to new considerations:
@@ -141,7 +141,8 @@ func (n *neuralNet) Name() string {
 func (n *neuralNet) Train(features, labels *matrix.Matrix) {
 	// We will load epochPerPeriod, batchSize, learningRate from a
 	// file. If the file does not exist, use default values
-	r := rand.NewRand(uint64(time.Now().UnixNano()))
+	//r := rand.NewRand(uint64(time.Now().UnixNano()))
+	r := rand.NewRand(2192018)
 	epochPerPeriod := 1
 	learningRate := .03
 	batchSize := 1

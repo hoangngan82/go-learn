@@ -44,7 +44,14 @@ func (l *layerOmni) Activate(x *matrix.Vector) *matrix.Vector {
 }
 
 func (l *layerOmni) BackProp(prevBlame *matrix.Vector) {
-	panic("not implemented")
+	var b matrix.Vector
+	var start, end int
+	for i := 0; i < len(l.unit); i++ {
+		end = start + len(l.activation[i])
+		b = (*prevBlame)[start:end]
+		l.unit[i].BackProp(&b)
+		start = end
+	}
 }
 
 func (l *layerOmni) Name() string {

@@ -135,5 +135,5 @@ func main() {
 	testOLS()
 	//testMRepNFoldCV(1, 10)
 	fmt.Println("\n\nMNIST training with MLP - LayerTanh\n")
-	mnist(10)
+	mnist(20)
 }

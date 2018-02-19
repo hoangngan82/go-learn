@@ -87,6 +87,7 @@ func (l *layer) Activation() *matrix.Vector {
 	return &(l.activation)
 }
 
+// Copy wraps a Layer around an activation Vector.
 func (l *layer) Copy(activation matrix.Vector) Layer {
 	matrix.Require(len(activation) == 0 || len(activation) == len(l.activation),
 		"layer: Copy: require len(activation) == 0 || len(activation) == len(l.activation)")
@@ -97,7 +98,7 @@ func (l *layer) Copy(activation matrix.Vector) Layer {
 	} else {
 		c.activation = activation
 	}
-	copy(c.activation, l.activation)
+	//copy(c.activation, l.activation)
 	return &c
 }
 

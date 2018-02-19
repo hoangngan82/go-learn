@@ -8,6 +8,7 @@ package learnML
 import (
 	"../matrix"
 	"gonum.org/v1/gonum/floats"
+	"gonum.org/v1/gonum/mat"
 )
 
 type layerLinear struct {
@@ -45,13 +46,10 @@ func (l *layerLinear) Activate(xo *matrix.Vector) *matrix.Vector {
 	copy(x, *xo)
 	x[len(*xo)] = 1.0
 	cols := len(l.weight) / rows
-	r := matrix.NewVector(len(x), nil)
-	for i := 0; i < cols; i++ {
-		for j := 0; j < rows; j++ {
-			r[j] = l.weight[j*cols+i]
-		}
-		l.activation[i] = floats.Dot(r, x)
-	}
+	xx := mat.NewDense(1, len(x), x)
+	mm := mat.NewDense(rows, cols, l.weight)
+	ac := mat.NewDense(1, cols, l.activation)
+	ac.Mul(xx, mm)
 	//M := matrix.NewMatrix(rows, cols, l.weight)
 	//l.activation.ToMatrix().Mul(x.ToMatrix(), M, false, false)
 	return &(l.activation)
