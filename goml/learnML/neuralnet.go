@@ -138,14 +138,28 @@ func (n *neuralNet) Name() string {
 
 // Train trains the model and stores weight in weights from the
 // linear layers.
-func (n *neuralNet) Train(features, labels *matrix.Matrix) {
+func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
 	// We will load epochPerPeriod, batchSize, learningRate from a
 	// file. If the file does not exist, use default values
 	//r := rand.NewRand(uint64(time.Now().UnixNano()))
 	r := rand.NewRand(2192018)
 	epochPerPeriod := 1
-	learningRate := .03
+	learningRate := 0.03
 	batchSize := 1
+
+	lp := len(params)
+	switch lp {
+	case 3:
+		epochPerPeriod = int(params[2])
+		fallthrough
+	case 2:
+		batchSize = int(params[1])
+		fallthrough
+	case 1:
+		learningRate = params[0]
+	default:
+	}
+
 	// load values from file
 	rows := labels.Rows()
 	if batchSize > rows {
@@ -183,8 +197,8 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix) {
 				n.BackProp(y, nil)
 				n.UpdateGradient(&x, gradient)
 			}
-			//n.RefineWeight(gradient, learningRate/float64(batchSize))
-			n.RefineWeight(gradient, learningRate)
+			n.RefineWeight(gradient, learningRate/float64(batchSize))
+			//n.RefineWeight(gradient, learningRate)
 			start = end
 		}
 		batchSize--
@@ -203,8 +217,8 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix) {
 			//fmt.Printf("%20.15e ", (*gradient)[p].Norm(0))
 			//}
 			//fmt.Printf("\nweight = ")
-			//n.RefineWeight(gradient, learningRate/float64(batchSize))
-			n.RefineWeight(gradient, learningRate)
+			n.RefineWeight(gradient, learningRate/float64(batchSize))
+			//n.RefineWeight(gradient, learningRate)
 			//weight, _ := n.Weight()
 			//for p := 0; p < len(*gradient); p++ {
 			//fmt.Printf("%20.15e ", weight[p].Norm(0))

@@ -14,7 +14,7 @@ type SupervisedLearner interface {
 	Name() string
 
 	// Train this learner
-	Train(features, labels *matrix.Matrix)
+	Train(features, labels *matrix.Matrix, paras ...float64)
 
 	// Partially train using a single pattern
 	TrainIncremental(feat, lab matrix.Vector)

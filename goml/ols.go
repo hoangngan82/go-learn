@@ -93,8 +93,12 @@ func mnist(numPeriod int) {
 		mlabels.SetElem(i, int(labels.GetElem(i, 0)), 1.0)
 	}
 
-	n := learnML.NewNeuralNet([]int{80, 30, 10}, learnML.LayerTanh,
+	n := learnML.NewNeuralNet([]int{80}, learnML.LayerTanh,
 		features.Cols(), mlabels.Cols())
+	t := learnML.NewLayer(learnML.LayerLeakyRectifier, []int{30})
+	n.AddLayer(t)
+	t = learnML.NewLayer(learnML.LayerTanh, []int{10})
+	n.AddLayer(t)
 	//n = learnML.NewNeuralNet([]int{98, 10}, learnML.LayerTanh,
 	//features.Cols(), mlabels.Cols())
 	n.InitWeight(nil)
@@ -135,5 +139,5 @@ func main() {
 	testOLS()
 	//testMRepNFoldCV(1, 10)
 	fmt.Println("\n\nMNIST training with MLP - LayerTanh\n")
-	mnist(20)
+	mnist(100)
 }

@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"gonum.org/v1/gonum/floats"
 	"math"
 	"os"
 	"sort"
@@ -411,9 +412,10 @@ func (m *Matrix) AddCols(n int) *Matrix {
 
 // Scale scales all element by the factor.
 func (m *Matrix) Scale(c float64) *Matrix {
-	for i := 0; i < len(m.data); i++ {
-		m.data[i] *= c
-	}
+	floats.Scale(c, m.data)
+	//for i := 0; i < len(m.data); i++ {
+	//m.data[i] *= c
+	//}
 	return m
 }
 
