@@ -101,6 +101,8 @@ func (n *neuralNet) Weight() ([]matrix.Vector, matrix.Vector) {
 	return g, data
 }
 
+// Initializing weights with a constant will keep the weights vector
+// a constant vector (with different values of the constant, maybe).
 func (n *neuralNet) InitWeight(w []matrix.Vector) {
 	if len(w) > 0 {
 		for i := 0; i < len(n.linearLayer); i++ {
@@ -146,22 +148,35 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
 	epochPerPeriod := 1
 	learningRate := 0.03
 	batchSize := 1
+	momentum := .0
+
+	rows := labels.Rows()
 
 	lp := len(params)
 	switch lp {
+	case 4:
+		if params[3] > 0.0 && params[3] < 1.0 {
+			momentum = params[3]
+		}
+		fallthrough
 	case 3:
-		epochPerPeriod = int(params[2])
+		if params[2] > 0.0 {
+			epochPerPeriod = int(params[2])
+		}
 		fallthrough
 	case 2:
-		batchSize = int(params[1])
+		if params[1] > 0.0 {
+			batchSize = int(params[1])
+		}
 		fallthrough
 	case 1:
-		learningRate = params[0]
+		if params[0] > 0.0 {
+			learningRate = params[0]
+		}
 	default:
 	}
 
 	// load values from file
-	rows := labels.Rows()
 	if batchSize > rows {
 		batchSize = rows
 	}
@@ -189,7 +204,7 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
 		start = 0
 		for b := 0; b < largeBatch; b++ {
 			end = start + batchSize
-			ResetGradient(gradient)
+			ScaleGradient(gradient, momentum)
 			for s := start; s < end; s++ {
 				x := features.Row(s)
 				y := labels.Row(s)
@@ -204,7 +219,7 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
 		batchSize--
 		for b := largeBatch; b < numBatch; b++ {
 			end = start + batchSize
-			ResetGradient(gradient)
+			ScaleGradient(gradient, momentum)
 			for s := start; s < end; s++ {
 				x := features.Row(s)
 				y := labels.Row(s)
@@ -275,16 +290,14 @@ func (n *neuralNet) BackProp(target matrix.Vector, prevBlame *matrix.Vector) {
 	}
 }
 
-func (n *neuralNet) ResetGradient(gradient *[]matrix.Vector) {
-	ResetGradient(gradient)
+func (n *neuralNet) ScaleGradient(gradient *[]matrix.Vector, c float64) {
+	ScaleGradient(gradient, c)
 }
 
-func ResetGradient(g *[]matrix.Vector) {
+func ScaleGradient(g *[]matrix.Vector, c float64) {
 	gradient := *g
 	for i := 0; i < len(gradient); i++ {
-		for j := 0; j < len(gradient[i]); j++ {
-			gradient[i][j] = 0.0
-		}
+		floats.Scale(c, gradient[i])
 	}
 }
 

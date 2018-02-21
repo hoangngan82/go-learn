@@ -108,7 +108,7 @@ func mnist(numPeriod int) {
 	for i := 0; i < numPeriod; i++ {
 		fmt.Printf("Training %2d:... ", i)
 		innerStart = time.Now()
-		n.Train(&features, mlabels)
+		n.Train(&features, mlabels, 0, 0, 0, 0.3)
 		fmt.Printf("%5.2fs\tCounting Misclassifications:... ",
 			time.Since(innerStart).Seconds())
 		mis = 0

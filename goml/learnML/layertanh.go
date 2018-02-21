@@ -35,3 +35,13 @@ func (l *layerTanh) BackProp(prevBlame *matrix.Vector) {
 func (l *layerTanh) Name() string {
 	return "Layer Tanh"
 }
+
+// Wrap wraps a Layer around an activation Vector.
+func (l *layerTanh) Wrap(activation matrix.Vector) Layer {
+	matrix.Require(len(activation) == len(l.activation),
+		"layer: Wrap: require len(activation) == len(l.activation)")
+	var c layerTanh
+	c.layer.activation = activation
+	//copy(c.activation, l.activation)
+	return &c
+}

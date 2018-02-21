@@ -39,9 +39,13 @@ func (l *layerLeakyRectifier) BackProp(prevBlame *matrix.Vector) {
 	}
 }
 
-func (l *layerLeakyRectifier) Copy(activation matrix.Vector) Layer {
+// Wrap wraps a Layer around an activation Vector.
+func (l *layerLeakyRectifier) Wrap(activation matrix.Vector) Layer {
+	matrix.Require(len(activation) == len(l.activation),
+		"layer: Wrap: require len(activation) == len(l.activation)")
 	var c layerLeakyRectifier
-	c.layer = *(l.layer.Copy(activation).(*layer))
+	c.layer.activation = activation
+	//copy(c.activation, l.activation)
 	return &c
 }
 

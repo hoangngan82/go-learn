@@ -22,6 +22,8 @@ const (
 	LayerConv
 	LayerLeakyRectifier
 	LayerMaxPooling2D
+	LayerComposite
+	LayerStack
 )
 
 type Layer interface {
@@ -30,7 +32,7 @@ type Layer interface {
 	Activation() *matrix.Vector
 	init(out Dimension, dim ...Dimension)
 	OutDim() Dimension
-	Copy(activation matrix.Vector) Layer
+	Wrap(activation matrix.Vector) Layer
 	Name() string
 }
 
@@ -87,17 +89,12 @@ func (l *layer) Activation() *matrix.Vector {
 	return &(l.activation)
 }
 
-// Copy wraps a Layer around an activation Vector.
-func (l *layer) Copy(activation matrix.Vector) Layer {
-	matrix.Require(len(activation) == 0 || len(activation) == len(l.activation),
-		"layer: Copy: require len(activation) == 0 || len(activation) == len(l.activation)")
+// Wrap wraps a Layer around an activation Vector.
+func (l *layer) Wrap(activation matrix.Vector) Layer {
+	matrix.Require(len(activation) == len(l.activation),
+		"layer: Wrap: require len(activation) == len(l.activation)")
 	var c layer
-	n := len(l.activation)
-	if len(activation) == 0 {
-		c.activation = make(matrix.Vector, n)
-	} else {
-		c.activation = activation
-	}
+	c.activation = activation
 	//copy(c.activation, l.activation)
 	return &c
 }
