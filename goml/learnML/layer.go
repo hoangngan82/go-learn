@@ -14,7 +14,7 @@ import (
 )
 
 type LayerType int
-type Dimension []int
+type Dims []int
 
 const (
 	LayerLinear LayerType = iota
@@ -23,20 +23,19 @@ const (
 	LayerLeakyRectifier
 	LayerMaxPooling2D
 	LayerComposite
-	LayerStack
 )
 
 type Layer interface {
 	Activate(x *matrix.Vector) *matrix.Vector
 	BackProp(prevBlame *matrix.Vector)
 	Activation() *matrix.Vector
-	init(out Dimension, dim ...Dimension)
-	OutDim() Dimension
+	init(out Dims, dim ...Dims)
+	OutDim() Dims
 	Wrap(activation matrix.Vector) Layer
 	Name() string
 }
 
-func NewLayer(t LayerType, out Dimension, dim ...Dimension) Layer {
+func NewLayer(t LayerType, out Dims, dim ...Dims) Layer {
 	var l Layer
 	switch t {
 	case LayerTanh:
@@ -45,6 +44,10 @@ func NewLayer(t LayerType, out Dimension, dim ...Dimension) Layer {
 		l = &layerLeakyRectifier{}
 	case LayerLinear:
 		l = &layer{}
+	case LayerConv:
+		l = &layerConv{}
+	case LayerComposite:
+		l = &layerComposite{}
 	default:
 		panic("Unsupported layer type!!!")
 	}
@@ -55,50 +58,33 @@ func NewLayer(t LayerType, out Dimension, dim ...Dimension) Layer {
 // layer implements identity activation function.
 type layer struct {
 	activation matrix.Vector
+	blame      matrix.Vector
 }
 
-func (l *layer) OutDim() Dimension {
-	return Dimension{len(l.activation)}
+func (l *layer) OutDim() Dims {
+	return Dims{len(l.activation)}
 }
 
 // dim = [out, inDim, innerDim]. Every layer must have an output
 // dimension. layerLinear must have an input dimension.
-func (l *layer) init(out Dimension, dim ...Dimension) {
-	l.activation = matrix.NewVector(out[0], nil)
+func (l *layer) init(out Dims, dim ...Dims) {
+	panic("layer: init: not implemented!")
 }
 
 // layer.Activate returns the input.
 func (l *layer) Activate(x *matrix.Vector) *matrix.Vector {
-	if len(l.activation) != len(*x) {
-		l.activation = matrix.NewVector(len(*x), nil)
-	}
-	l.activation.Copy(*x)
-	return x
+	panic("layer: Activate: not implemented!")
 }
 
-// layer.BackProp returns the derivative of the identity activation
-// function, which is 1.
 func (l *layer) BackProp(prevBlame *matrix.Vector) {
-	if len(*prevBlame) != len(l.activation) {
-		*prevBlame = matrix.NewVector(len(l.activation), nil)
-	}
-	(*prevBlame).Fill(1.0)
-}
-
-func (l *layer) Activation() *matrix.Vector {
-	return &(l.activation)
+	panic("layer: BackProp: not implemented!")
 }
 
 // Wrap wraps a Layer around an activation Vector.
 func (l *layer) Wrap(activation matrix.Vector) Layer {
-	matrix.Require(len(activation) == len(l.activation),
-		"layer: Wrap: require len(activation) == len(l.activation)")
-	var c layer
-	c.activation = activation
-	//copy(c.activation, l.activation)
-	return &c
+	panic("layer: Wrap: not implemented!")
 }
 
 func (l *layer) Name() string {
-	return "Identity Layer"
+	panic("layer: Name: not implemented!")
 }
