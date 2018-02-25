@@ -12,41 +12,30 @@ type layerLeakyRectifier struct {
 }
 
 func (l *layerLeakyRectifier) Activate(x *matrix.Vector) *matrix.Vector {
-	if len(l.layer.activation) != len(*x) {
-		l.layer.activation = matrix.NewVector(len(*x), nil)
-	}
+	//if len(l.layer.activation) != len(*x) {
+	//l.layer.activation = matrix.NewVector(len(*x), nil)
+	//}
+	copy(l.layer.activation, *x)
 	for i := 0; i < len(*x); i++ {
 		if (*x)[i] < 0 {
 			l.layer.activation[i] = 0.01 * (*x)[i]
-		} else {
-			l.layer.activation[i] = (*x)[i]
-		}
+		} //else {
+		//l.layer.activation[i] = (*x)[i]
+		//}
 	}
 	return &(l.layer.activation)
 }
 
 func (l *layerLeakyRectifier) BackProp(prevBlame *matrix.Vector) {
-	if len(*prevBlame) != len(l.layer.activation) {
-		*prevBlame = matrix.NewVector(len(l.layer.activation), nil)
-	}
 	v := *prevBlame
+	copy(v, l.layer.blame)
 	for i := 0; i < len(v); i++ {
 		if l.layer.activation[i] < 0 {
-			v[i] = .01
-		} else {
-			v[i] = 1.0
-		}
+			v[i] = .01 * l.layer.blame[i]
+		} //else {
+		//v[i] = l.layer.blame[i]
+		//}
 	}
-}
-
-// Wrap wraps a Layer around an activation Vector.
-func (l *layerLeakyRectifier) Wrap(activation matrix.Vector) Layer {
-	matrix.Require(len(activation) == len(l.activation),
-		"layer: Wrap: require len(activation) == len(l.activation)")
-	var c layerLeakyRectifier
-	c.layer.activation = activation
-	//copy(c.activation, l.activation)
-	return &c
 }
 
 func (l *layerLeakyRectifier) Name() string {

@@ -7,10 +7,11 @@ import (
 )
 
 func main() {
-	n := learnML.NewNeuralNet([]int{2}, learnML.LayerTanh, 1, 2)
-	il := learnML.NewLayer(learnML.LayerLinear, []int{1})
-	n.AddLayer(il)
-	n.InitWeight([]matrix.Vector{{.3, .4, .1, .2}, {.2, .3, .1}})
+	n := learnML.NewNeuralNet()
+	n.AddLayer(learnML.LayerLinear, learnML.Dims{1, 2})
+	n.AddLayer(learnML.LayerTanh, learnML.Dims{2})
+	n.AddLayer(learnML.LayerLinear, learnML.Dims{2, 1})
+	n.InitWeight([]matrix.Vector{{.3, .4, .1, .2}, {}, {.2, .3, .1}})
 	x := matrix.Vector{.3}
 	y := matrix.Vector{.7}
 	n.Activate(&x)

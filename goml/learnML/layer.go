@@ -28,14 +28,17 @@ const (
 type Layer interface {
 	Activate(x *matrix.Vector) *matrix.Vector
 	BackProp(prevBlame *matrix.Vector)
-	Activation() *matrix.Vector
-	init(out Dims, dim ...Dims)
+	init(dim Dims, dims ...Dims)
 	OutDim() Dims
-	Wrap(activation matrix.Vector) Layer
+	Wrap(activation, blame matrix.Vector, weight ...matrix.Vector) Layer
 	Name() string
+	UpdateGradient(in, gradient *matrix.Vector)
+	Activation() *matrix.Vector
+	Blame() *matrix.Vector
+	Weight() *matrix.Vector
 }
 
-func NewLayer(t LayerType, out Dims, dim ...Dims) Layer {
+func NewLayer(t LayerType, dim Dims, dims ...Dims) Layer {
 	var l Layer
 	switch t {
 	case LayerTanh:
@@ -43,7 +46,7 @@ func NewLayer(t LayerType, out Dims, dim ...Dims) Layer {
 	case LayerLeakyRectifier:
 		l = &layerLeakyRectifier{}
 	case LayerLinear:
-		l = &layer{}
+		l = &layerLinear{}
 	case LayerConv:
 		l = &layerConv{}
 	case LayerComposite:
@@ -51,7 +54,7 @@ func NewLayer(t LayerType, out Dims, dim ...Dims) Layer {
 	default:
 		panic("Unsupported layer type!!!")
 	}
-	l.init(out, dim...)
+	l.init(dim, dims...)
 	return l
 }
 
@@ -59,6 +62,7 @@ func NewLayer(t LayerType, out Dims, dim ...Dims) Layer {
 type layer struct {
 	activation matrix.Vector
 	blame      matrix.Vector
+	weight     matrix.Vector
 }
 
 func (l *layer) OutDim() Dims {
@@ -67,8 +71,10 @@ func (l *layer) OutDim() Dims {
 
 // dim = [out, inDim, innerDim]. Every layer must have an output
 // dimension. layerLinear must have an input dimension.
-func (l *layer) init(out Dims, dim ...Dims) {
-	panic("layer: init: not implemented!")
+func (l *layer) init(dim Dims, dims ...Dims) {
+	l.activation = make(matrix.Vector, dim[0])
+	l.blame = make(matrix.Vector, dim[0])
+	l.weight = make(matrix.Vector, 0)
 }
 
 // layer.Activate returns the input.
@@ -81,10 +87,24 @@ func (l *layer) BackProp(prevBlame *matrix.Vector) {
 }
 
 // Wrap wraps a Layer around an activation Vector.
-func (l *layer) Wrap(activation matrix.Vector) Layer {
+func (l *layer) Wrap(activation, blame matrix.Vector, weight ...matrix.Vector) Layer {
 	panic("layer: Wrap: not implemented!")
 }
 
 func (l *layer) Name() string {
 	panic("layer: Name: not implemented!")
+}
+
+func (l *layer) UpdateGradient(in, gradient *matrix.Vector) {}
+
+func (l *layer) Activation() *matrix.Vector {
+	return &(l.activation)
+}
+
+func (l *layer) Blame() *matrix.Vector {
+	return &(l.blame)
+}
+
+func (l *layer) Weight() *matrix.Vector {
+	return &(l.weight)
 }
