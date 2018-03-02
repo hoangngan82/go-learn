@@ -57,12 +57,12 @@ type Matrix struct {
 	enum_to_str []map[int]string
 }
 
-// NewMatrix creates a matrix of size rows*cols and set all element
-// to the value val (default = 0).
+// NewMatrix creates a matrix of size rows*cols or wrap a matrix
+// around a slice val. rows can be 0 but cols cannot.
 func NewMatrix(rows, cols int, val []float64) *Matrix {
-	Require(rows > 0 && cols > 0,
-		"NewMatrix: cannot generate an empty matrix of size %d-by-%d\n",
-		rows, cols)
+	Require(cols > 0, "%s %d%s%d\n",
+		"NewMatrix: cannot generate an empty matrix of size",
+		rows, "-by-", cols)
 	Require(len(val) == 0 || len(val) == rows*cols,
 		"NewMatrix: require len(val) = 0 || len(val) = rows*cols\n")
 	var m Matrix
@@ -419,6 +419,28 @@ func (m *Matrix) Scale(c float64) *Matrix {
 	return m
 }
 
+// CopyMetaData copy metadata from (from)Matrix to the receiver.
+func (m *Matrix) CopyMetadata(from *Matrix) {
+	Require(m.cols == from.cols, "%s %s %d %s %d.\n",
+		"Matrix: CopyMetadata: Expected two matrices of the same number",
+		"columns, but receiver has", m.cols, "and source has", from.cols)
+	m.relation = from.relation + "-imputed"
+	m.attrName = make([]string, from.cols)
+	m.str_to_enum = make([]map[string]int, from.cols)
+	m.enum_to_str = make([]map[int]string, from.cols)
+	copy(m.attrName, from.attrName)
+	for i := 0; i < from.cols; i++ {
+		m.str_to_enum[i] = make(map[string]int)
+		m.enum_to_str[i] = make(map[int]string)
+		for k, v := range from.str_to_enum[i] {
+			m.str_to_enum[i][k] = v
+		}
+		for k, v := range from.enum_to_str[i] {
+			m.enum_to_str[i][k] = v
+		}
+	}
+}
+
 // ChangeAttrName changes the names of a list of attributes. If the
 // new name is an empty string or is not defined, the old name is
 // kept.
@@ -490,20 +512,30 @@ func (m *Matrix) SaveARFF(fileName string) {
 				file.WriteString(",")
 			}
 			var s string
-			switch m.enum_to_str[j][ATTR_NAME][0] {
-			case 'n': // nominal
-				s = fmt.Sprintf("%s", m.enum_to_str[j][int(m.matrix[i][j])])
-			case 'r': // real
-				s = fmt.Sprintf("%.15e", m.matrix[i][j])
-			default: // date
-				t := int64(m.matrix[i][j])
-				s = fmt.Sprintf("%s", time.Unix(t, 0).Format(TIME_FORMAT))
+			if m.matrix[i][j] == UNKNOWN_VALUE {
+				s = "?"
+			} else {
+				switch m.enum_to_str[j][ATTR_NAME][0] {
+				case 'n': // nominal
+					s = fmt.Sprintf("%s", m.enum_to_str[j][int(m.matrix[i][j])])
+				case 'r': // real
+					s = fmt.Sprintf("%.5e", m.matrix[i][j])
+				default: // date
+					t := int64(m.matrix[i][j])
+					s = fmt.Sprintf("%s", time.Unix(t, 0).Format(TIME_FORMAT))
+				}
 			}
 			file.WriteString(s)
 		}
 		file.WriteString("\n")
 		file.Flush()
 	}
+}
+
+// ValueCount returns the number of categorical values in the column
+// i and 0 if the variable in the column i is continuous.
+func (m *Matrix) ValueCount(i int) int {
+	return len(m.str_to_enum[i])
 }
 
 // LoadARFF loads data from ARFF file to a matrix
@@ -549,7 +581,7 @@ func (m *Matrix) LoadARFF(fileName string, tz ...string) *Matrix {
 			case "{": // nominal
 				m.enum_to_str[m.cols][ATTR_NAME] = "nominal"
 				sn := s[2][1 : len(s[2])-1]
-				n := Split(sn, ",", 0)
+				n := Split(sn, ", ", 0)
 				for i := 0; i < len(n); i++ {
 					m.str_to_enum[m.cols][n[i]] = i
 					m.enum_to_str[m.cols][i] = n[i]
@@ -1104,6 +1136,75 @@ func (m *Matrix) Random(seed ...uint64) *Matrix {
 // ToVector wraps a vector around m.data.
 func (m *Matrix) ToVector() Vector {
 	return m.data
+}
+
+// ColumnMax compute the mean of each column of a Matrix.
+func (m *Matrix) ColumnMax(c int) float64 {
+	s := float64(-1e308)
+	count := 0
+	for i := 0; i < m.rows; i++ {
+		if m.matrix[i][c] == UNKNOWN_VALUE {
+			continue
+		}
+		count++
+		if s < m.matrix[i][c] {
+			s = m.matrix[i][c]
+		}
+	}
+	Require(count != 0, "%s %d %s\n",
+		"Matrix: ColumnMax: all data in column", c, "are unknown!")
+	return s
+}
+
+// ColumnMin compute the mean of each column of a Matrix.
+func (m *Matrix) ColumnMin(c int) float64 {
+	s := float64(1e308)
+	count := 0
+	for i := 0; i < m.rows; i++ {
+		if m.matrix[i][c] == UNKNOWN_VALUE {
+			continue
+		}
+		count++
+		if s > m.matrix[i][c] {
+			s = m.matrix[i][c]
+		}
+	}
+	Require(count != 0, "%s %d %s\n",
+		"Matrix: ColumnMin: all data in column", c, "are unknown!")
+	return s
+}
+
+// ColumnMean compute the mean of each column of a Matrix.
+func (m *Matrix) ColumnMean(c int) float64 {
+	s := float64(0)
+	var count int = 0
+	for i := 0; i < m.rows; i++ {
+		if m.matrix[i][c] != UNKNOWN_VALUE {
+			s += m.matrix[i][c]
+			count++
+		}
+	}
+	Require(count != 0, "%s %d %s\n",
+		"Matrix: ColumnMean: all data in column", c, "are unknown!")
+	return s / float64(count)
+}
+
+func (m *Matrix) MostCommonValue(c int) float64 {
+	list := make(map[float64]int)
+	for i := 0; i < m.rows; i++ {
+		if m.matrix[i][c] != UNKNOWN_VALUE {
+			list[m.matrix[i][c]]++
+		}
+	}
+	max := 0
+	retval := 0.0
+	for key, value := range list {
+		if value > max {
+			max = value
+			retval = key
+		}
+	}
+	return retval
 }
 
 // OLS return the weights in approximating labels = M*features + b.
