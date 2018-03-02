@@ -49,8 +49,8 @@ func NewLayer(t LayerType, dim Dims, dims ...Dims) Layer {
 		l = &layerLinear{}
 	case LayerConv:
 		l = &layerConv{}
-	case LayerComposite:
-		l = &layerComposite{}
+	case LayerMaxPooling2D:
+		l = &layerMaxPooling2D{}
 	default:
 		panic("Unsupported layer type!!!")
 	}

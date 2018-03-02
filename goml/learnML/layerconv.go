@@ -6,7 +6,9 @@ import (
 
 type layerConv struct {
 	layer
-	in, filter, out Dims
+	in     Dims
+	filter Dims
+	out    Dims
 }
 
 func (l *layerConv) init(dim Dims, dims ...Dims) {
@@ -57,6 +59,9 @@ func (l *layerConv) Activate(x *matrix.Vector) *matrix.Vector {
 		sizeOut *= l.out[i]
 	}
 
+	// reset l.layer.activation
+	l.layer.activation.Fill(0.0)
+
 	// Do convolution
 	var out, filter *matrix.Tensor
 	for i := 0; i < l.out[dc]; i++ {
@@ -67,6 +72,7 @@ func (l *layerConv) Activate(x *matrix.Vector) *matrix.Vector {
 	return &(l.layer.activation)
 }
 
+// BackProp compute Convolve(blame, weight, prevBlame)
 func (l *layerConv) BackProp(prevBlame *matrix.Vector) {
 	var in, out, filter *matrix.Tensor
 	dc := len(l.in)
@@ -85,9 +91,36 @@ func (l *layerConv) BackProp(prevBlame *matrix.Vector) {
 
 	// Do (backward) convolution
 	for i := 0; i < l.out[dc]; i++ {
-		in = matrix.NewTensor(l.layer.activation[i*sizeIn:(i+1)*sizeIn], l.out[:dc])
+		in = matrix.NewTensor(l.layer.blame[i*sizeIn:(i+1)*sizeIn], l.out[:dc])
 		filter = matrix.NewTensor(l.layer.weight[i*sizeFilter:(i+1)*sizeFilter], l.filter[:dc])
 		matrix.Convolve(in, filter, out, true, 1)
+	}
+}
+
+// gradient = in*blame
+// Note that gradient and in are in the same dimensional space. blame
+// is fo the same size as activation. Just as activation = in*weight,
+// we do the same thing here (weight) = in*(activation).
+func (l *layerConv) UpdateGradient(in *matrix.Vector, gradient *matrix.Vector) {
+	var blame, prevActivation, gt *matrix.Tensor
+	dc := len(l.in)
+	prevActivation = matrix.NewTensor(*in, l.in)
+
+	sizeGrad := 1
+	for i := 0; i < dc; i++ {
+		sizeGrad *= l.filter[i]
+	}
+
+	sizeBlame := 1
+	for i := 0; i < dc; i++ {
+		sizeBlame *= l.out[i]
+	}
+
+	// Do (backward) convolution
+	for i := 0; i < l.out[dc]; i++ {
+		blame = matrix.NewTensor(l.layer.blame[i*sizeBlame:(i+1)*sizeBlame], l.out[:dc])
+		gt = matrix.NewTensor((*gradient)[i*sizeGrad:(i+1)*sizeGrad], l.filter[:dc])
+		matrix.Convolve(prevActivation, blame, gt, false, 1)
 	}
 }
 

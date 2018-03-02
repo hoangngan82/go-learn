@@ -3,8 +3,8 @@ package learnML
 import (
 	"../matrix"
 	"../rand"
-	"gonum.org/v1/gonum/floats"
 	//"fmt"
+	"gonum.org/v1/gonum/floats"
 	//"time"
 )
 
@@ -72,8 +72,14 @@ func (n *neuralNet) InitWeight(w []matrix.Vector) {
 	//r := rand.NewRand(uint64(time.Now().UnixNano()))
 	for i := 0; i < len(n.layers); i++ {
 		outputCount := len(*(n.layers[i].Activation()))
+		if outputCount == 0 {
+			continue
+		}
 		inputCount := len(*(n.layers[i].Weight()))/outputCount - 1
-		max := 1.0 / float64(inputCount)
+		max := 1.0
+		if inputCount != 0 {
+			max /= float64(inputCount)
+		}
 		if max < 0.03 {
 			max = 0.03
 		}
@@ -323,9 +329,10 @@ func (n *neuralNet) String() string {
 		if len(wgh) == 0 {
 			s += " empty []\n"
 		} else {
-			cols := len(act)
-			rows := len(wgh) / cols
-			s += wgh.ToMatrix(rows, cols).String()
+			//cols := len(act)
+			//rows := len(wgh) / cols
+			//s += wgh.ToMatrix(rows, cols).String()
+			s += wgh.String()
 		}
 	}
 	s += "*********************************************************\n"
