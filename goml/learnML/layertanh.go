@@ -5,7 +5,7 @@ package learnML
 
 import (
 	"../matrix"
-	"gonum.org/v1/gonum/floats"
+	//"gonum.org/v1/gonum/floats"
 	"math"
 )
 
@@ -25,9 +25,14 @@ func (l *layerTanh) Activate(x *matrix.Vector) *matrix.Vector {
 
 func (l *layerTanh) BackProp(prevBlame *matrix.Vector) {
 	v := *prevBlame
-	floats.MulTo(v, l.layer.activation, l.layer.activation)
-	floats.Mul(v, l.layer.blame)
-	floats.SubTo(v, l.layer.blame, v)
+	b := l.layer.blame
+	a := l.layer.activation
+	for i := 0; i < len(v); i++ {
+		v[i] = b[i] * (1 - a[i]*a[i])
+	}
+	//floats.MulTo(v, l.layer.activation, l.layer.activation)
+	//floats.Mul(v, l.layer.blame)
+	//floats.SubTo(v, l.layer.blame, v)
 }
 
 func (l *layerTanh) Name() string {

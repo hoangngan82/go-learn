@@ -1,0 +1,29 @@
+\documentclass[12pt]{article}
+\usepackage{pgfplots}
+
+\begin{document}
+\begin{tikzpicture}
+  \begin{axis}
+    [title={Assigment 5: Hoang-Ngan Nguyen},
+      width=\textwidth,
+      legend style={at={(.5,1)},anchor=north},
+      legend cell align=left,
+      ymin = 2,
+      ymax = 9.5,
+    ]
+    \addplot[mark=none,green,] table [x expr=\coordindex,y index=0]
+    {./labor_stats.arff};
+    \addplot[mark=none,red!50!white,] table [x expr=\coordindex,y index=0]
+    {./a5_0_0};
+    \addplot[mark=none,blue!80!green,] table [x expr=\coordindex,y index=0]
+    {./a5_1_0};
+    \addplot[mark=none,cyan!80!yellow,] table [x expr=\coordindex,y index=0]
+    {./a5_0_1};
+    \addplot[mark=none,magenta!90!yellow,densely dotted,thick] table [x expr=\coordindex,y index=0]
+    {./a5_1_1};
+    \addplot[thin,gray,opacity=.5] coordinates {(256,0) (256,10)};
+    \legend{$data$,$no$-$reg$,$L_1$-$reg$,$L_2$-$reg$,$L_1$-and-$L_2$}
+  \end{axis}
+\end{tikzpicture}
+
+\end{document}

@@ -4,7 +4,7 @@ import (
 	"../matrix"
 	"../rand"
 	//"fmt"
-	"gonum.org/v1/gonum/floats"
+	//"gonum.org/v1/gonum/floats"
 	//"time"
 )
 
@@ -58,6 +58,23 @@ func (n *neuralNet) Weight() ([]matrix.Vector, matrix.Vector) {
 	return g, data
 }
 
+func (n *neuralNet) CopyWeight() []matrix.Vector {
+	g := make([]matrix.Vector, len(n.layers))
+	for i := 0; i < len(n.layers); i++ {
+		g[i] = matrix.NewVector(len(*(n.layers[i].Weight())), nil)
+		copy(g[i], *(n.layers[i].Weight()))
+	}
+	return g
+}
+
+//func (n *neuralNet) CopyWeight() []matrix.Vector {
+//g := make([]matrix.Vector, len(n.layers))
+//for i := 0; i < len(n.layers); i++ {
+//g[i] = *(n.layers[i].Weight())
+//}
+//return g
+//}
+
 // Initializing weights with a constant will keep the weights vector
 // a constant vector (with different values of the constant, maybe).
 func (n *neuralNet) InitWeight(w []matrix.Vector) {
@@ -89,60 +106,58 @@ func (n *neuralNet) InitWeight(w []matrix.Vector) {
 	}
 }
 
-func (n *neuralNet) Name() string {
+func (n *neuralNet) Structure() string {
 	if n == nil {
 		return "empty neuralNet"
 	}
 	s := "\ninput => "
 	for i := 0; i < len(n.layers); i++ {
-		s += "Layer Linear -> " + n.layers[i].Name() + " -> "
+		s += n.layers[i].Name() + " -> "
 	}
 	s += "output\n"
 	return s
 }
 
+func (n *neuralNet) Name() string {
+	return n.Structure()
+}
+
 // Train trains the model and stores weight in weights from the
-// linear layers.
-func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
-	// We will load epochPerPeriod, batchSize, learningRate from a
-	// file. If the file does not exist, use default values
-	//r := rand.NewRand(uint64(time.Now().UnixNano()))
-	r := rand.NewRand(2192018)
-	epochPerPeriod := 1
+// linear layers. Train only runs for one full epoch, if you want to
+// train for N epochs, you have to call Train N times.
+// There only 4 parameters can be passed through the map params, namely,
+// seed, learningRate, batchSize, and momentum.
+func (n *neuralNet) Train(features, labels *matrix.Matrix,
+	params map[string]float64) {
+	matrix.Require(features.Rows() == labels.Rows(),
+		"neuralNet.Train: Expect %s but get %d = %d\n",
+		"features.Rows() == labels.Rows()", features.Rows(), labels.Rows())
+
+	seed := uint64(params["seed"])
 	learningRate := 0.03
 	batchSize := 1
-	momentum := 1.0/float64(batchSize) - 1.0
+	momentum := 0.0
 
 	rows := labels.Rows()
 
-	lp := len(params)
-	switch lp {
-	case 4:
-		if params[3] > 0.0 && params[3] < 1.0 {
-			momentum = params[3]
-		}
-		fallthrough
-	case 3:
-		if params[2] > 0.0 {
-			epochPerPeriod = int(params[2])
-		}
-		fallthrough
-	case 2:
-		if params[1] > 0.0 {
-			batchSize = int(params[1])
-		}
-		fallthrough
-	case 1:
-		if params[0] > 0.0 {
-			learningRate = params[0]
-		}
-	default:
+	if params["learningRate"] > 0.0 {
+		learningRate = params["learningRate"]
 	}
 
-	// load values from file
+	if params["momentum"] > 0.0 {
+		momentum = params["momentum"]
+	}
+
+	var temp int = 0
+	temp = int(params["batchSize"])
+	if temp != 0 {
+		batchSize = temp
+	}
 	if batchSize > rows {
 		batchSize = rows
 	}
+
+	// compute batch size
 	numBatch := rows / batchSize
 	largeBatch := rows % batchSize
 	for numBatch < largeBatch {
@@ -152,57 +167,48 @@ func (n *neuralNet) Train(features, labels *matrix.Matrix, params ...float64) {
 	}
 	gradient := n.CreateGradient()
 
-	// loop through epochs per period
-	for j := 0; j < epochPerPeriod; j++ {
-		// shuffle data
-		for rr := rows; rr > 1; rr-- {
-			l := int(r.Next(uint64(rr)))
-			features.SwapRows(rr-1, l)
-			labels.SwapRows(rr-1, l)
-		}
+	P := make([]int, features.Rows())
+	for i := 0; i < len(P); i++ {
+		P[i] = i
+	}
+	// shuffle data
+	random := rand.NewRand(seed)
+	for r := rows; r > 1; r-- {
+		l := int(random.Next(uint64(r)))
+		P[r-1], P[l] = P[l], P[r-1]
+	}
 
-		// now loop through batches
-		var start, end int
-		batchSize++
-		start = 0
-		for b := 0; b < largeBatch; b++ {
-			end = start + batchSize
-			ScaleGradient(gradient, momentum)
-			for s := start; s < end; s++ {
-				x := features.Row(s)
-				y := labels.Row(s)
-				n.Activate(&x)
-				n.BackProp(y, nil)
-				n.UpdateGradient(&x, gradient)
-			}
-			n.RefineWeight(gradient, learningRate/float64(batchSize))
-			//n.RefineWeight(gradient, learningRate)
-			start = end
+	// now loop through batches
+	var start, end int
+	batchSize++
+	start = 0
+	for b := 0; b < largeBatch; b++ {
+		end = start + batchSize
+		ScaleGradient(gradient, momentum)
+		for s := start; s < end; s++ {
+			x := features.Row(P[s])
+			y := labels.Row(P[s])
+			n.Activate(&x)
+			n.BackProp(y, nil)
+			n.UpdateGradient(&x, gradient)
 		}
-		batchSize--
-		for b := largeBatch; b < numBatch; b++ {
-			end = start + batchSize
-			ScaleGradient(gradient, momentum)
-			for s := start; s < end; s++ {
-				x := features.Row(s)
-				y := labels.Row(s)
-				n.Activate(&x)
-				n.BackProp(y, nil)
-				n.UpdateGradient(&x, gradient)
-			}
-			//fmt.Printf("\nat b = %7d, grad = ", b)
-			//for p := 0; p < len(*gradient); p++ {
-			//fmt.Printf("%20.15e ", (*gradient)[p].Norm(0))
-			//}
-			//fmt.Printf("\nweight = ")
-			n.RefineWeight(gradient, learningRate/float64(batchSize))
-			//n.RefineWeight(gradient, learningRate)
-			//weight, _ := n.Weight()
-			//for p := 0; p < len(*gradient); p++ {
-			//fmt.Printf("%20.15e ", weight[p].Norm(0))
-			//}
-			start = end
+		n.RefineWeight(gradient, learningRate/float64(batchSize))
+		//n.RefineWeight(gradient, learningRate)
+		start = end
+	}
+	batchSize--
+	for b := largeBatch; b < numBatch; b++ {
+		end = start + batchSize
+		ScaleGradient(gradient, momentum)
+		for s := start; s < end; s++ {
+			x := features.Row(P[s])
+			y := labels.Row(P[s])
+			n.Activate(&x)
+			n.BackProp(y, nil)
+			n.UpdateGradient(&x, gradient)
 		}
+		n.RefineWeight(gradient, learningRate/float64(batchSize))
+		start = end
 	}
 }
 
@@ -229,6 +235,8 @@ func (n *neuralNet) Predict(in matrix.Vector) matrix.Vector {
 
 // neuralNet.BackProp computes blame for each linear layer. We need
 // to feed it with the target vector.
+// Note that this BackProp function omit the constant 2 in front of
+// the actual derivative.
 func (n *neuralNet) BackProp(target matrix.Vector, prevBlame *matrix.Vector) {
 	N := len(n.layers)
 	output := *(n.layers[N-1].Activation())
@@ -248,7 +256,11 @@ func (n *neuralNet) ScaleGradient(gradient *[]matrix.Vector, c float64) {
 func ScaleGradient(g *[]matrix.Vector, c float64) {
 	gradient := *g
 	for i := 0; i < len(gradient); i++ {
-		floats.Scale(c, gradient[i])
+		v := gradient[i]
+		for j := 0; j < len(v); j++ {
+			v[j] *= c
+		}
+		//floats.Scale(c, gradient[i])
 	}
 }
 
@@ -309,7 +321,12 @@ func (n *neuralNet) RefineWeight(gradient *[]matrix.Vector, rate float64) {
 		if len(g[i]) == 0 {
 			continue
 		}
-		floats.AddScaled(*(n.layers[i].Weight()), rate, g[i])
+		w := *(n.layers[i].Weight())
+		v := g[i]
+		for j := 0; j < len(v); j++ {
+			w[j] += rate * v[j]
+		}
+		//floats.AddScaled(*(n.layers[i].Weight()), rate, g[i])
 	}
 }
 

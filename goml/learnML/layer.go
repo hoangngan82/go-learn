@@ -23,6 +23,7 @@ const (
 	LayerLeakyRectifier
 	LayerMaxPooling2D
 	LayerComposite
+	LayerSinusoidal
 )
 
 type Layer interface {
@@ -51,6 +52,8 @@ func NewLayer(t LayerType, dim Dims, dims ...Dims) Layer {
 		l = &layerConv{}
 	case LayerMaxPooling2D:
 		l = &layerMaxPooling2D{}
+	case LayerSinusoidal:
+		l = &layerSinusoidal{}
 	default:
 		panic("Unsupported layer type!!!")
 	}

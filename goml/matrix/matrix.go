@@ -9,7 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"gonum.org/v1/gonum/floats"
+	//"gonum.org/v1/gonum/floats"
 	"math"
 	"os"
 	"sort"
@@ -178,7 +178,7 @@ func (m *Matrix) Col(j int) Vector {
 // Row wraps a vector around the row i.
 func (m *Matrix) Row(i int) Vector {
 	Require(i >= 0 && i < m.rows,
-		"Col: index out of bound: r = %d\n", i)
+		"Row: index out of bound: r = %d\n", i)
 	return m.matrix[i]
 }
 
@@ -412,15 +412,18 @@ func (m *Matrix) AddCols(n int) *Matrix {
 
 // Scale scales all element by the factor.
 func (m *Matrix) Scale(c float64) *Matrix {
-	floats.Scale(c, m.data)
-	//for i := 0; i < len(m.data); i++ {
-	//m.data[i] *= c
-	//}
+	//floats.Scale(c, m.data)
+	for i := 0; i < len(m.data); i++ {
+		m.data[i] *= c
+	}
 	return m
 }
 
 // CopyMetaData copy metadata from (from)Matrix to the receiver.
 func (m *Matrix) CopyMetadata(from *Matrix) {
+	if m == from { // remove this to destroy this function
+		return
+	}
 	Require(m.cols == from.cols, "%s %s %d %s %d.\n",
 		"Matrix: CopyMetadata: Expected two matrices of the same number",
 		"columns, but receiver has", m.cols, "and source has", from.cols)
@@ -471,40 +474,46 @@ func (m *Matrix) GetValueName(col, val int) string {
 }
 
 // SaveARFF save data from a matrix to an ARFF file.
-func (m *Matrix) SaveARFF(fileName string) {
+func (m *Matrix) SaveARFF(fileName string, headerOn ...bool) {
 	fileio, err := os.Create(fileName)
 	Require(err == nil, "SaveARFF: %v\n", err)
 	defer fileio.Close()
 
-	file := bufio.NewWriter(fileio)
-	file.WriteString("@relation " + m.relation + "\n\n")
-	file.Flush()
-	for i := 0; i < m.cols; i++ {
-		quote := ""
-		for j := 0; j < len(m.attrName[i]); j++ {
-			if m.attrName[i][j] == ' ' {
-				quote = "\""
-				break
-			}
-		}
-		file.WriteString("@attribute " + quote + m.attrName[i] +
-			quote + "\t")
-		s := m.enum_to_str[i][ATTR_NAME]
-		switch s[0] {
-		case 'n': // nominal
-			file.WriteString("{" + m.enum_to_str[i][0])
-			for j := 1; j < len(m.str_to_enum[i]); j++ {
-				file.WriteString("," + m.enum_to_str[i][j])
-			}
-			file.WriteString("}\n")
-		case 'r': // real
-			file.WriteString("real\n")
-		default: // date
-			file.WriteString("\"yyyy-MM-dd HH:mm:ss\"\n")
-		}
-		file.Flush()
+	header := true
+	if len(headerOn) > 0 {
+		header = headerOn[0]
 	}
-	file.WriteString("\n@data\n")
+	file := bufio.NewWriter(fileio)
+	if header {
+		file.WriteString("@relation " + m.relation + "\n\n")
+		file.Flush()
+		for i := 0; i < m.cols; i++ {
+			quote := ""
+			for j := 0; j < len(m.attrName[i]); j++ {
+				if m.attrName[i][j] == ' ' {
+					quote = "\""
+					break
+				}
+			}
+			file.WriteString("@attribute " + quote + m.attrName[i] +
+				quote + "\t")
+			s := m.enum_to_str[i][ATTR_NAME]
+			switch s[0] {
+			case 'n': // nominal
+				file.WriteString("{" + m.enum_to_str[i][0])
+				for j := 1; j < len(m.str_to_enum[i]); j++ {
+					file.WriteString("," + m.enum_to_str[i][j])
+				}
+				file.WriteString("}\n")
+			case 'r': // real
+				file.WriteString("real\n")
+			default: // date
+				file.WriteString("\"yyyy-MM-dd HH:mm:ss\"\n")
+			}
+			file.Flush()
+		}
+		file.WriteString("\n@data\n")
+	}
 	// write data
 	for i := 0; i < m.rows; i++ {
 		for j := 0; j < m.cols; j++ {
@@ -1151,8 +1160,9 @@ func (m *Matrix) ColumnMax(c int) float64 {
 			s = m.matrix[i][c]
 		}
 	}
-	Require(count != 0, "%s %d %s\n",
-		"Matrix: ColumnMax: all data in column", c, "are unknown!")
+	Require(count != 0, "\n%s %d (%s) %s\n",
+		"Matrix: ColumnMax: all data in column",
+		c, m.attrName[c], "are unknown!")
 	return s
 }
 
@@ -1169,8 +1179,9 @@ func (m *Matrix) ColumnMin(c int) float64 {
 			s = m.matrix[i][c]
 		}
 	}
-	Require(count != 0, "%s %d %s\n",
-		"Matrix: ColumnMin: all data in column", c, "are unknown!")
+	Require(count != 0, "\n%s %d (%s) %s\n",
+		"Matrix: ColumnMin: all data in column",
+		c, m.attrName[c], "are unknown!")
 	return s
 }
 
@@ -1184,18 +1195,24 @@ func (m *Matrix) ColumnMean(c int) float64 {
 			count++
 		}
 	}
-	Require(count != 0, "%s %d %s\n",
-		"Matrix: ColumnMean: all data in column", c, "are unknown!")
+	Require(count != 0, "\n%s %d (%s) %s\n",
+		"Matrix: ColumnMean: all data in column",
+		c, m.attrName[c], "are unknown!")
 	return s / float64(count)
 }
 
 func (m *Matrix) MostCommonValue(c int) float64 {
 	list := make(map[float64]int)
+	count := 0
 	for i := 0; i < m.rows; i++ {
 		if m.matrix[i][c] != UNKNOWN_VALUE {
 			list[m.matrix[i][c]]++
+			count++
 		}
 	}
+	Require(count != 0, "\n%s %d (%s) %s\n",
+		"Matrix: MostCommonValue: all data in column",
+		c, m.attrName[c], "are unknown!")
 	max := 0
 	retval := 0.0
 	for key, value := range list {
@@ -1217,4 +1234,14 @@ func OLS(features, labels *Matrix) Vector {
 	y.CopyRows(labels, start, end)
 	x.FillCol(-1, 1)
 	return x.LeastSquare(y).ToVector()
+}
+
+// Shuffle shuffles the rows of the matrix.
+func (m *Matrix) Shuffle() {
+	r := rand.NewRand(uint64(time.Now().UnixNano()))
+	for rr := m.rows; rr > 1; rr-- {
+		l := int(r.Next(uint64(rr)))
+		m.SwapRows(rr-1, l)
+		m.SwapRows(rr-1, l)
+	}
 }

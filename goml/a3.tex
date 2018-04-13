@@ -1,0 +1,76 @@
+\documentclass[12pt]{article}
+\usepackage{pgfplots}
+\usetikzlibrary{spy}
+\author{Hoang-Ngan Nguyen}
+\title{Assignment 3}
+\begin{document}
+\maketitle
+\begin{figure}[htpb]
+\begin{center}
+\begin{tikzpicture}[spy using outlines={circle,
+  magnification=3,connect spies}]
+  \begin{axis}
+    [title={Comparison between training error and validation error},
+      width=\textwidth,
+      legend style={at={(.5,1)},anchor=north},
+      legend cell align=left,
+      ymin = -.5,
+      ymax = 9,
+      xlabel={number of epochs},
+      ylabel={mean square error},
+      %xmin = 0,
+      %xmax = 300,
+    ]
+    \coordinate (spypoint) at (10,59);
+    \coordinate (spyviewer) at (100,29);
+    \addplot[mark=none,green,ultra thick] table [col sep=comma,x expr=\coordindex,y index=0]
+    {./overfit.dat};
+    \addplot[mark=none,blue,ultra thick] table [col sep=comma,x expr=\coordindex,y index=1]
+    {./overfit.dat};
+    \addplot[red] coordinates {(14,0) (14,9)}
+    node[pos=.8,sloped,anchor=north] {the $14^{th}$ epoch};
+    \legend{$training$,$validation$}
+  \end{axis}
+  \spy[cyan,size=4cm,] on (spypoint) in node [fill=white] at
+    (spyviewer);
+\end{tikzpicture}
+\end{center}
+\caption{Learning rate is set to $0.001$. The magnify glass shows
+that mean square error on the validation set reach the lowest value at, approximately, the
+$14^{th}$ epoch and quickly converges after the $20^{th}$ epoch}
+\label{fig:1}
+\end{figure}
+
+\begin{figure}[htpb]
+\begin{center}
+\begin{tikzpicture}[spy using outlines={circle,
+  magnification=3,connect spies}]
+  \begin{axis}
+    [title={Comparison between momentum and minibatch},
+      width=\textwidth,
+      legend style={at={(.5,1)},anchor=north},
+      legend cell align=left,
+      ymin = -.5,
+      ymax = 6,
+      xlabel={time in seconds},
+      ylabel={RMSE},
+      %xmin = 0,
+      %xmax = 300,
+    ]
+    \addplot[mark=none,green,dashdotted,ultra thick] table [col sep=comma,x index=2, y index=0]
+    {./batch_momentum.dat};
+    \addplot[mark=none,green,ultra thick] table [col sep=comma,x index=2, y index=1]
+    {./batch_momentum.dat};
+    \addplot[mark=none,blue,dashdotted,ultra thick] table [col sep=comma,x index=5, y index=3]
+    {./batch_momentum.dat};
+    \addplot[mark=none,blue,ultra thick] table [col sep=comma,x index=5, y index=4]
+    {./batch_momentum.dat};
+    \legend{$training-batch$,$validation-batch$,$training-momentum$,$validation-momentum$}
+  \end{axis}
+\end{tikzpicture}
+\end{center}
+\caption{Learning rate is set to $0.001$. Batch size is set to $16$
+and momentum is set to $1 - 1/16 = 0.93750$.}
+\label{fig:2}
+\end{figure}
+\end{document}

@@ -2,6 +2,7 @@ package learnML
 
 import (
 	"../matrix"
+	"fmt"
 )
 
 type Normalizer struct {
@@ -14,6 +15,7 @@ func (n *Normalizer) Train(data matrix.Matrix) {
 	n.inputMin = matrix.NewVector(N, nil)
 	n.inputMax = matrix.NewVector(N, nil)
 	for i := 0; i < N; i++ {
+		fmt.Printf("at %5d: value count = %d\n", i, data.ValueCount(i))
 		if data.ValueCount(i) == 0 {
 			n.inputMin[i] = data.ColumnMin(i)
 			n.inputMax[i] = data.ColumnMax(i)

@@ -99,7 +99,8 @@ func mnist(numPeriod int) {
 	n.AddLayer(learnML.LayerLinear, learnML.Dims{features.Cols(), 80})
 	n.AddLayer(learnML.LayerTanh, learnML.Dims{80, 80})
 	n.AddLayer(learnML.LayerLinear, learnML.Dims{80, 30})
-	n.AddLayer(learnML.LayerLeakyRectifier, learnML.Dims{30, 30})
+	//n.AddLayer(learnML.LayerLeakyRectifier, learnML.Dims{30, 30})
+	n.AddLayer(learnML.LayerTanh, learnML.Dims{30, 30})
 	n.AddLayer(learnML.LayerLinear, learnML.Dims{30, mlabels.Cols()})
 	n.AddLayer(learnML.LayerTanh, learnML.Dims{10, 10})
 	//n = learnML.NewNeuralNet([]int{98, 10}, learnML.LayerTanh,
